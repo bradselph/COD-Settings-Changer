@@ -405,6 +405,8 @@ class OptionsEditor(QMainWindow):
             for setting in data["settings"]:
                 widget_key = f"{section}_{setting['name']}"
                 if widget_key in self.widgets:
+                    widget = self.widgets[widget_key]
+                    widget.setEnabled(setting["editable"])
                 
     def save_options(self):
         self.log("Starting save_options method")
