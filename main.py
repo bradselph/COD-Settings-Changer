@@ -414,9 +414,10 @@ class OptionsEditor(QMainWindow):
             QMessageBox.critical(self, "Error", "One or both files are not loaded")
             return
         if self.read_only:
-            new_file_path, _ = QFileDialog.getSaveFileName (self, "Save Game-Specific File As", os.path.dirname (self.file_path),                                                           "CST Files (*.cst);;All Files (*)")
-            new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName (self, "Save Game-Agnostic File As", os.path.dirname (self.game_agnostic_file_path),
-                                                                         "CST Files (*.cst);;All Files (*)")
+            new_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Specific File As", os.path.dirname(self.file_path),
+                                                       "CST Files (*.cst);;All Files (*)")
+            new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Agnostic File As", os.path.dirname(self.game_agnostic_file_path),
+                                                                     "CST Files (*.cst);;All Files (*)")
             if not new_file_path or not new_game_agnostic_file_path:
                 return
             self.file_path = new_file_path
@@ -442,7 +443,6 @@ class OptionsEditor(QMainWindow):
             error_msg += f"Error args: {e.args}\n"
             QMessageBox.critical(self, "Error", error_msg)
             self.log(error_msg)
-
     def save_file(self, file_path, file_type):
         try:
             with open(file_path, 'r') as file:
