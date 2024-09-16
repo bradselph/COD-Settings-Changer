@@ -405,17 +405,15 @@ class OptionsEditor(QMainWindow):
             for setting in data["settings"]:
                 widget_key = f"{section}_{setting['name']}"
                 if widget_key in self.widgets:
-                    widget = self.widgets[widget_key]
-
+                
     def save_options(self):
         self.log("Starting save_options method")
         if not self.file_path or not self.game_agnostic_file_path:
             QMessageBox.critical(self, "Error", "One or both files are not loaded")
             return
         if self.read_only:
-            new_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Specific File As", os.path.dirname(self.file_path),
-                                                           "CST Files (*.cst);;All Files (*)")
-            new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Agnostic File As", os.path.dirname(self.game_agnostic_file_path),
+            new_file_path, _ = QFileDialog.getSaveFileName (self, "Save Game-Specific File As", os.path.dirname (self.file_path),                                                           "CST Files (*.cst);;All Files (*)")
+            new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName (self, "Save Game-Agnostic File As", os.path.dirname (self.game_agnostic_file_path),
                                                                          "CST Files (*.cst);;All Files (*)")
             if not new_file_path or not new_game_agnostic_file_path:
                 return
