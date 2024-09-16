@@ -85,7 +85,7 @@ class OptionsEditor(QMainWindow):
         file_menu = menu_bar.addMenu("File")
         file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
         file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
-        file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
+        file_menu.addAction(QAction("Reload", self, triggered=self.load_file))
         file_menu.addSeparator()
         file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
@@ -260,10 +260,14 @@ class OptionsEditor(QMainWindow):
                         validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
                         widget.setValidator(validator)
                 elif "one of" in setting['comment']:
-                    options = re.findall(r'\[(.*?)\]', setting['comment'])[0].split(', ')
-                    widget = QComboBox()
-                    widget.addItems(options)
-                    widget.setCurrentText(value)
+                    matches = re.findall(r'\[(.*?)\]', setting['comment'])
+                    if matches:
+                        options = matches[0].split(', ')
+                    else:
+                        options = []  # or some default value
+                        widget = QComboBox()
+                        widget.addItems(options)
+                        widget.setCurrentText(value)
                 else:
                     widget = QLineEdit(value)
                 scroll_layout.addWidget(widget, i, 1)
@@ -339,46 +343,6 @@ class OptionsEditor(QMainWindow):
             QMessageBox.critical(self, "Error", error_msg)
             self.log(error_msg)
 
-    def save_file(self, file_path, file_type):
-        try:
-            with open(file_path, 'r') as file:
-                lines = file.readlines()
-
-            for i, line in enumerate(lines):
-                if '=' in line and not line.strip().startswith('//'):
-                    key = line.split('=', 1)[0].strip().split(':')[0] if file_type == "GameSpecific" else line.split('=', 1)[0].strip().split('@')[0]
-                    for section, data in self.options.items():
-                        for setting in data["settings"]:
-                            if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
-                                widget_key = f"{section}_{setting['name']}"
-                                if widget_key in self.widgets:
-                                    widget = self.widgets[widget_key]
-                                    if isinstance(widget, QCheckBox):
-                                        value = str(widget.isChecked()).lower()
-                                    elif isinstance(widget, QSlider):
-                                        is_whole_number = '.' not in setting['comment']
-                                        if is_whole_number:
-                                            value = str(widget.value())
-                                            else:
-                                                value = f"{widget.value() / 1000:.6f}"
-                                    elif isinstance(widget, QComboBox):
-                                        value = widget.currentText()
-                                    elif isinstance(widget, QLineEdit):
-                                        value = widget.text()
-                                        if '.' not in setting['comment'] and value.replace('.', '').isdigit():
-                                            value = str(int(float(value)))
-                                    else:
-                                        continue
-                                    if "to" in setting['comment']:
-                                        numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
-                                        if len(numbers) >= 2:
-                                            try:
-                                                min_val, max_val = float(numbers[0]), float(numbers[1])
-                                                float_value = float(value)
-                                                if float_value < min_val or float_value > max_val:
-                                                    user_choice = QMessageBox.warning(
-                                                        self,
-                                                        "Value out of range",
     def save_file(self, file_path, file_type):
         try:
             with open(file_path, 'r') as file:
