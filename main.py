@@ -1,10 +1,9 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QToolTip)
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
-
 import sys
 import os
 import re
@@ -58,27 +57,28 @@ class LogWindow(QDockWidget):
 			self.log(f"Log saved to {file_name}")
 
 class OptionsEditor(QMainWindow):
-	def __init__(self):
-		super().__init__()
-		self.setWindowTitle("Call of Duty Options Editor")
-		self.setGeometry(100, 100, 1000, 600)
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Call of Duty Options Editor")
+        self.setGeometry(100, 100, 1000, 600)
 
-		self.options = {}
-		self.widgets = {}
-		self.file_path = ""
-		self.game_agnostic_file_path = ""
-		self.read_only = False
-		self.game = ""
-		self.selected_game = ""
+        self.options = {}
+        self.widgets = {}
+        self.file_path = ""
+        self.game_agnostic_file_path = ""
+        self.read_only = False
+        self.game = ""
+        self.selected_game = ""
 
-		self.log_window = LogWindow(self)
-		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-		self.log_window.hide()
+        self.log_window = LogWindow(self)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+        self.log_window.hide()
 
-		self.create_menu()
-		self.create_widgets()
+        self.create_menu()
+        self.create_widgets()
+        self.create_help_texts()
 
-		self.select_game()
+        self.select_game()
 
 	def create_menu(self):
 		menu_bar = self.menuBar()
@@ -101,6 +101,47 @@ class OptionsEditor(QMainWindow):
 		self.edit_all_action = QAction("Enable Editing of All Values", self, checkable=True)
 		self.edit_all_action.triggered.connect(self.toggle_edit_all)
 		options_menu.addAction(self.edit_all_action)
+
+	def create_help_texts(self):
+		self.help_texts = {
+            # Game-specific settings
+            "VideoMemoryScale": "Adjusts the fraction of your GPU's memory used by the game. Higher values may improve texture quality but could cause instability.",
+            "RendererWorkerCount": "Sets the number of CPU threads for handling rendering tasks. Higher values may improve performance on multi-core CPUs.",
+            "ConfigCloudStorageEnabled": "Enables cloud synchronization for non-hardware settings.",
+            "ConfigCloudSavegameEnabled": "Enables cloud synchronization for campaign save games.",
+            "VoicePushToTalk": "When enabled, you need to press a key to activate your microphone in voice chat.",
+            "AudioMix": "Selects from predefined audio mix presets for different listening environments.",
+            "Volume": "Adjusts the overall game volume.",
+            "VoiceVolume": "Adjusts the volume of character dialogues and announcer voices.",
+            "MusicVolume": "Adjusts the volume of background music.",
+            "EffectsVolume": "Adjusts the volume of sound effects.",
+            "HitMarkersVolume": "Adjusts the volume of hit marker sounds.",
+            "CapFps": "Enables or disables the custom frame rate limit.",
+            "MaxFpsInGame": "Sets the maximum frame rate during gameplay. Higher values provide smoother gameplay but require more powerful hardware.",
+            "MaxFpsInMenu": "Sets the maximum frame rate in menus. Lower values can reduce power consumption when not in gameplay.",
+            "MaxFpsOutOfFocus": "Sets the maximum frame rate when the game window is not in focus. Lower values can reduce resource usage when tabbed out.",
+            "DepthOfField": "Adds a blur effect to out-of-focus areas when aiming down sights. May impact performance.",
+            "DisplayMode": "Chooses between fullscreen, windowed, and borderless window modes.",
+            "Resolution": "Sets the display resolution. Higher resolutions provide better image quality but require more powerful hardware.",
+            "NvidiaReflex": "Reduces system latency on NVIDIA GPUs. 'Enabled + boost' mode may provide the lowest latency but could increase power consumption.",
+            "TextureQuality": "Adjusts the resolution of textures. Higher quality requires more VRAM and may impact performance.",
+            "ParticleQuality": "Adjusts the detail level of particle effects. Higher quality may impact performance in busy scenes.",
+            "DLSSMode": "Enables NVIDIA DLSS (Deep Learning Super Sampling) for improved performance at higher resolutions on supported GPUs.",
+            "AMDFidelityFX": "Enables AMD FidelityFX features for improved image quality or performance on supported GPUs.",
+            "HDR": "Enables High Dynamic Range for improved color and brightness on supported displays.",
+
+            # Game-agnostic settings
+            "MicrophoneVolume": "Adjusts the volume of your microphone input.",
+            "MicThreshold": "Sets the minimum volume threshold for your microphone to activate.",
+            "Brightness": "Adjusts the overall brightness of the game. Higher values make the game brighter but may wash out some details.",
+            "Fov": "Adjusts the Field of View in first-person perspective. Higher values show more of the game world but may cause distortion at the edges.",
+            "ThirdPersonFov": "Adjusts the Field of View in third-person perspective.",
+            "ADSFovScaling": "When enabled, maintains your set FOV when aiming down sights.",
+            "MouseInvertPitch": "Inverts the vertical mouse movement. Enable if you prefer pushing the mouse forward to look down.",
+            "MouseHorizontalSensibility": "Adjusts the horizontal sensitivity of the mouse. Higher values make camera movement more responsive.",
+            "MouseVerticalSensibility": "Adjusts the vertical sensitivity of the mouse. Higher values make camera movement more responsive.",
+            "ADSSensitivity": "Adjusts mouse sensitivity when aiming down sights. Lower values can help with precision aiming.",
+        }
 
 	def create_widgets(self):
 		central_widget = QWidget()
@@ -208,83 +249,90 @@ class OptionsEditor(QMainWindow):
 			QMessageBox.critical(self, "Error", f"Failed to parse options file {file_path}: {str(e)}")
 			self.log(f"Error parsing options file {file_path}: {str(e)}")
 
-	def display_options(self):
-		self.tab_widget.clear()
-		self.widgets.clear()
-		for section, data in self.options.items():
-			scroll_area = QScrollArea()
-			scroll_widget = QWidget()
-			scroll_layout = QGridLayout()
+    def display_options(self):
+        self.tab_widget.clear()
+        self.widgets.clear()
+        for section, data in self.options.items():
+            scroll_area = QScrollArea()
+            scroll_widget = QWidget()
+            scroll_layout = QGridLayout()
 
-			for i, setting in enumerate(data["settings"]):
-				label = QLabel(f"{setting['name']}:")
-				scroll_layout.addWidget(label, i, 0)
+            for i, setting in enumerate(data["settings"]):
+                label = QLabel(f"{setting['name']}:")
+                scroll_layout.addWidget(label, i, 0)
 
-				value = setting['value'].strip('"')
-				if value.lower() in ('true', 'false'):
-					widget = QCheckBox()
-					widget.setChecked(value.lower() == 'true')
-				elif re.match(r'^-?\d+(\.\d+)?$', value):
-					if "to" in setting['comment']:
-						numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
-						if len(numbers) >= 2:
-							try:
-								min_val, max_val = float(numbers[0]), float(numbers[1])
-								is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
-								if is_whole_number:
-									widget = QSlider(Qt.Horizontal)
-									widget.setRange(int(min_val), int(max_val))
-									widget.setValue(int(float(value)))
-									widget.setTickPosition(QSlider.TicksBelow)
-									widget.setTickInterval(max(1, int((max_val - min_val) / 10)))
-								else:
-									widget = QSlider(Qt.Horizontal)
-									widget.setRange(int(min_val * 1000), int(max_val * 1000))
-									widget.setValue(int(float(value) * 1000))
-									widget.setTickPosition(QSlider.TicksBelow)
-									widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10)
+                value = setting['value'].strip('"')
+                if value.lower() in ('true', 'false'):
+                    widget = QCheckBox()
+                    widget.setChecked(value.lower() == 'true')
+                elif re.match(r'^-?\d+(\.\d+)?$', value):
+                    if "to" in setting['comment']:
+                        numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
+                        if len(numbers) >= 2:
+                            try:
+                                min_val, max_val = float(numbers[0]), float(numbers[1])
+                                is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
+                                if is_whole_number:
+                                    widget = QSlider(Qt.Horizontal)
+                                    widget.setRange(int(min_val), int(max_val))
+                                    widget.setValue(int(float(value)))
+                                    widget.setTickPosition(QSlider.TicksBelow)
+                                    widget.setTickInterval(max(1, int((max_val - min_val) / 10)))
+                                else:
+                                    widget = QSlider(Qt.Horizontal)
+                                    widget.setRange(int(min_val * 1000), int(max_val * 1000))
+                                    widget.setValue(int(float(value) * 1000))
+                                    widget.setTickPosition(QSlider.TicksBelow)
+                                    widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10)
 
-								value_label = QLabel(value)
-								scroll_layout.addWidget(value_label, i, 2)
+                                value_label = QLabel(value)
+                                scroll_layout.addWidget(value_label, i, 2)
 
-								widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-															self.update_slider_value(v, label, min_v, max_v, whole))
-							except ValueError:
-								widget = QLineEdit(value)
-								validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-								widget.setValidator(validator)
-						else:
-							widget = QLineEdit(value)
-							validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-							widget.setValidator(validator)
-					else:
-						widget = QLineEdit(value)
-						validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-						widget.setValidator(validator)
-				elif "one of" in setting['comment']:
-					matches = re.findall(r'\[(.*?)\]', setting['comment'])
-					if matches:
-						options = matches[0].split(', ')
-					else:
-						options = []  # or some default value
-						widget = QComboBox()
-						widget.addItems(options)
-						widget.setCurrentText(value)
-				else:
-					widget = QLineEdit(value)
-				scroll_layout.addWidget(widget, i, 1)
-				widget.setEnabled(setting['editable'])
-				self.widgets[f"{section}_{setting['name']}"] = widget
-				comment = QLabel(setting['comment'])
-				scroll_layout.addWidget(comment, i, 3)
-				file_type_label = QLabel(f"({setting['file_type']})")
-				scroll_layout.addWidget(file_type_label, i, 4)
+                                widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
+                                                            self.update_slider_value(v, label, min_v, max_v, whole))
+                            except ValueError:
+                                widget = QLineEdit(value)
+                                validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
+                                widget.setValidator(validator)
+                        else:
+                            widget = QLineEdit(value)
+                            validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
+                            widget.setValidator(validator)
+                    else:
+                        widget = QLineEdit(value)
+                        validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
+                        widget.setValidator(validator)
+                elif "one of" in setting['comment']:
+                    matches = re.findall(r'\[(.*?)\]', setting['comment'])
+                    if matches:
+                        options = matches[0].split(', ')
+                        widget = QComboBox()
+                        widget.addItems(options)
+                        widget.setCurrentText(value)
+                    else:
+                        widget = QLineEdit(value)
+                else:
+                    widget = QLineEdit(value)
 
-			scroll_widget.setLayout(scroll_layout)
-			scroll_area.setWidget(scroll_widget)
-			scroll_area.setWidgetResizable(True)
-			self.tab_widget.addTab(scroll_area, section)
-		self.update_widget_states()
+                scroll_layout.addWidget(widget, i, 1)
+                widget.setEnabled(setting['editable'])
+                self.widgets[f"{section}_{setting['name']}"] = widget
+
+                # Add tooltip
+                tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
+                tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
+                QToolTip.setToolTip(widget, tooltip_text)
+
+                comment = QLabel(setting['comment'])
+                scroll_layout.addWidget(comment, i, 3)
+                file_type_label = QLabel(f"({setting['file_type']})")
+                scroll_layout.addWidget(file_type_label, i, 4)
+
+            scroll_widget.setLayout(scroll_layout)
+            scroll_area.setWidget(scroll_widget)
+            scroll_area.setWidgetResizable(True)
+            self.tab_widget.addTab(scroll_area, section)
+        self.update_widget_states()
 
 	def update_slider_value(self, value, label, min_val, max_val, whole_number):
 		if whole_number:
@@ -425,10 +473,10 @@ def reload_file(self):
 		self.log("Files reloaded")
 
 def main():
-	app = QApplication(sys.argv)
-	editor = OptionsEditor()
-	editor.show()
-	sys.exit(app.exec_())
+    app = QApplication(sys.argv)
+    editor = OptionsEditor()
+    editor.show()
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
-	main()
+    main()
