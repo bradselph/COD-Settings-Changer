@@ -73,6 +73,11 @@ class OptionsEditor(QMainWindow):
         self.read_only = False
         self.game = ""
         self.selected_game = ""
+        self.non_editable_fields = [
+            "SoundOutputDevice", "SoundInputDevice", "VoiceOutputDevice", "VoiceInputDevice",
+            "Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
+            "GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
+        ]
 
         self.log_window = LogWindow(self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
@@ -112,9 +117,6 @@ class OptionsEditor(QMainWindow):
         options_menu = menu_bar.addMenu("Options")
         self.read_only_action = QAction("Save as Read-only", self, checkable=True)
         options_menu.addAction(self.read_only_action)
-        self.edit_all_action = QAction("Enable Editing of All Values", self, checkable=True)
-        self.edit_all_action.triggered.connect(self.toggle_edit_all)
-        options_menu.addAction(self.edit_all_action)
 
     def create_help_texts(self):
         self.help_texts = {
@@ -309,7 +311,25 @@ class OptionsEditor(QMainWindow):
                 label = QLabel(f"{setting['name']}:")
                 scroll_layout.addWidget(label, i, 0)
                 value = setting['value'].strip('"')
-                if value.lower() in ('true', 'false'):
+                if setting['name'] in self.non_editable_fields:
+                    widget = QLineEdit(value)
+                    widget.setReadOnly(True)
+                elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate"]:
+                    widget = QComboBox()
+                    options = setting['comment'].split("one of ")[1].strip("[]").split(", ")
+                    widget.addItems(options)
+                    widget.setCurrentText(value)
+                elif setting['name'] == "Resolution":
+                    widget = QComboBox()
+                    options = ["1920x1080", "2560x1440", "3840x2160"]
+                    widget.addItems(options)
+                    widget.setCurrentText(value)
+                elif setting['name'] == "RefreshRate":
+                    widget = QComboBox()
+                    options = ["60 Hz", "120 Hz"]
+                    widget.addItems(options)
+                    widget.setCurrentText(value)
+                elif value.lower() in ('true', 'false'):
                     widget = QCheckBox()
                     widget.setChecked(value.lower() == 'true')
                 elif re.match(r'^-?\d+(\.\d+)?$', value):
@@ -359,7 +379,7 @@ class OptionsEditor(QMainWindow):
                 else:
                     widget = QLineEdit(value)
                 scroll_layout.addWidget(widget, i, 1)
-                widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY"))
+                widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields)
                 self.widgets[f"{section}_{setting['name']}"] = widget
                 tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
                 tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
@@ -373,7 +393,6 @@ class OptionsEditor(QMainWindow):
             scroll_area.setWidgetResizable(True)
             self.tab_widget.addTab(scroll_area, section)
         self.update_widget_states()
-
     def update_slider_value(self, value, label, min_val, max_val, whole_number):
         if whole_number:
             real_value = value
@@ -387,10 +406,6 @@ class OptionsEditor(QMainWindow):
                 widget_key = f"{section}_{setting['name']}"
                 if widget_key in self.widgets:
                     widget = self.widgets[widget_key]
-                    widget.setEnabled(self.edit_all_action.isChecked() or setting["editable"])
-
-    def toggle_edit_all(self, checked):
-        self.update_widget_states()
 
     def save_options(self):
         self.log("Starting save_options method")
