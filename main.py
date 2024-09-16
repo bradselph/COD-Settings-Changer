@@ -66,6 +66,7 @@ class OptionsEditor(QMainWindow):
         self.options = {}
         self.widgets = {}
         self.file_path = ""
+        self.game_agnostic_file_path = ""
         self.read_only = False
         self.game = ""
 
@@ -130,63 +131,84 @@ class OptionsEditor(QMainWindow):
             default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
             file_name = "options.4.cod23.cst"
             self.file_path = os.path.join(default_path, file_name)
+            self.game_agnostic_file_path = os.path.join(default_path, "gamerprofile.0.BASE.cst")
 
             if not os.path.exists(self.file_path):
                 QMessageBox.warning(self, "File Not Found", f"Could not find {file_name}. Please select it manually.")
                 self.file_path = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
                                                              "CST Files (*.cst);;All Files (*)")[0]
+
+            if not os.path.exists(self.game_agnostic_file_path):
+                QMessageBox.warning(self, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
+                self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst", default_path,
+                                                                           "CST Files (*.cst);;All Files (*)")[0]
         else:
             default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
             self.file_path = QFileDialog.getOpenFileName(self, "Select options.4.cod23.cst file", default_path,
                                                          "CST Files (*.cst);;All Files (*)")[0]
+            self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst file", default_path,
+                                                                       "CST Files (*.cst);;All Files (*)")[0]
 
-        if self.file_path:
-            self.read_only = not os.access(self.file_path, os.W_OK)
+        if self.file_path and self.game_agnostic_file_path:
+            self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
             if self.read_only:
                 QMessageBox.information(self, "Read-only File",
-                                        "The selected file is read-only. You can make changes, but you'll need to save it as a new file or remove the read-only attribute.")
+                                        "One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
             self.parse_options_file()
             self.display_options()
 
     def parse_options_file(self):
         self.options.clear()
-        current_section = ""
 
+        # Parse game-specific file
+        self.parse_file(self.file_path, "GameSpecific")
+
+        # Parse game-agnostic file
+        self.parse_file(self.game_agnostic_file_path, "GameAgnostic")
+
+        self.log(f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from both files")
+
+    def parse_file(self, file_path, file_type):
         try:
-            with open(self.file_path, 'r') as file:
+            with open(file_path, 'r') as file:
                 content = file.read()
-                sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
-                section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
+                if file_type == "GameSpecific":
+                    sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
+                    section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
+                else:  # GameAgnostic
+                    sections = [content]
+                    section_names = ["GameAgnostic"]
 
                 for name, section in zip(section_names, sections):
-                    self.options[name] = {"settings": []}
-                    lines = section.strip().split('\n')
-                    for line in lines:
-                        if '=' in line and not line.strip().startswith('//'):
-                            key, value = line.split('=', 1)
-                            key = key.split(':')[0].strip()  # Remove version number
-                            value = value.strip().strip('"')
-                            comment = ""
-                            if '//' in value:
-                                value, comment = value.split('//', 1)
-                                value = value.strip()
-                                comment = comment.strip()
-                            self.options[name]["settings"].append({
-                                "name": key,
-                                "value": value,
-                                "comment": comment,
-                                "editable": not line.strip().startswith("// DO NOT MODIFY")
+                    if name not in self.options:
+                        self.options[name] = {"settings": []}
+                        lines = section.strip().split('\n')
+                        for line in lines:
+                            if '=' in line and not line.strip().startswith('//'):
+                                key, value = line.split('=', 1)
+                                key = key.split(':')[0].strip() if file_type == "GameSpecific" else key.split('@')[0].strip()
+                                value = value.strip().strip('"')
+                                comment = ""
+                                if '//' in value:
+                                    value, comment = value.split('//', 1)
+                                    value = value.strip()
+                                    comment = comment.strip()
+                                self.options[name]["settings"].append({
+                                    "name": key,
+                                    "value": value,
+                                    "comment": comment,
+                                    "editable": not line.strip().startswith("// DO NOT MODIFY"),
+                                    "file_type": file_type
                             })
-
             self.log(
                 f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from {self.file_path}")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to parse options file: {str(e)}")
-            self.log(f"Error parsing options file: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to parse options file {file_path}: {str(e)}")
+            self.log(f"Error parsing options file {file_path}: {str(e)}")
 
     def display_options(self):
         self.tab_widget.clear()
-        self.widgets.clear()  # Clear existing widgets
+        self.widgets.clear()
         for section, data in self.options.items():
             scroll_area = QScrollArea()
             scroll_widget = QWidget()
@@ -196,7 +218,7 @@ class OptionsEditor(QMainWindow):
                 label = QLabel(f"{setting['name']}:")
                 scroll_layout.addWidget(label, i, 0)
 
-                value = setting['value'].strip('"')  # Remove any surrounding quotes
+                value = setting['value'].strip('"')
                 if value.lower() in ('true', 'false'):
                     widget = QCheckBox()
                     widget.setChecked(value.lower() == 'true')
@@ -220,11 +242,9 @@ class OptionsEditor(QMainWindow):
                                     widget.setTickPosition(QSlider.TicksBelow)
                                     widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10)
 
-                                # Add a label to display the current value
                                 value_label = QLabel(value)
                                 scroll_layout.addWidget(value_label, i, 2)
 
-                                # Connect the slider's valueChanged signal to update the label
                                 widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
                                                             self.update_slider_value(v, label, min_v, max_v, whole))
                             except ValueError:
@@ -251,6 +271,10 @@ class OptionsEditor(QMainWindow):
                 self.widgets[f"{section}_{setting['name']}"] = widget
                 comment = QLabel(setting['comment'])
                 scroll_layout.addWidget(comment, i, 3)
+                # Add file type indicator
+                file_type_label = QLabel(f"({setting['file_type']})")
+                scroll_layout.addWidget(file_type_label, i, 4)
+
             scroll_widget.setLayout(scroll_layout)
             scroll_area.setWidget(scroll_widget)
             scroll_area.setWidgetResizable(True)
@@ -277,28 +301,95 @@ class OptionsEditor(QMainWindow):
 
     def save_options(self):
         self.log("Starting save_options method")
-        if not self.file_path:
-            QMessageBox.critical(self, "Error", "No file loaded")
+        if not self.file_path or not self.game_agnostic_file_path:
+            QMessageBox.critical(self, "Error", "One or both files are not loaded")
             return
 
         if self.read_only:
-            new_file_path, _ = QFileDialog.getSaveFileName(self, "Save As", os.path.dirname(self.file_path),
+            new_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Specific File As", os.path.dirname(self.file_path),
                                                            "CST Files (*.cst);;All Files (*)")
-            if not new_file_path:
+            new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Agnostic File As", os.path.dirname(self.game_agnostic_file_path),
+                                                                         "CST Files (*.cst);;All Files (*)")
+            if not new_file_path or not new_game_agnostic_file_path:
                 return
             self.file_path = new_file_path
+            self.game_agnostic_file_path = new_game_agnostic_file_path
             self.read_only = False
 
         try:
-            with open(self.file_path, 'r') as file:
+            self.save_file(self.file_path, "GameSpecific")
+            self.save_file(self.game_agnostic_file_path, "GameAgnostic")
+
+            if self.read_only_action.isChecked():
+                os.chmod(self.file_path, stat.S_IREAD)
+                os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
+                self.read_only = True
+            else:
+                os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
+                os.chmod(self.game_agnostic_file_path, stat.S_IWRITE | stat.S_IREAD)
+                self.read_only = False
+
+            self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
+            QMessageBox.information(self, "Success", "Options saved successfully")
+            self.reload_file()
+        except Exception as e:
+            error_msg = f"Failed to save options: {str(e)}\n"
+            error_msg += f"Error type: {type(e).__name__}\n"
+            error_msg += f"Error args: {e.args}\n"
+            QMessageBox.critical(self, "Error", error_msg)
+            self.log(error_msg)
+
+    def save_file(self, file_path, file_type):
+        try:
+            with open(file_path, 'r') as file:
                 lines = file.readlines()
 
             for i, line in enumerate(lines):
-                if "=" in line and not line.strip().startswith('//'):
-                    key = line.split('=', 1)[0].strip().split(':')[0]
+                if '=' in line and not line.strip().startswith('//'):
+                    key = line.split('=', 1)[0].strip().split(':')[0] if file_type == "GameSpecific" else line.split('=', 1)[0].strip().split('@')[0]
                     for section, data in self.options.items():
                         for setting in data["settings"]:
-                            if key == setting["name"] and setting["editable"]:
+                            if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
+                                widget_key = f"{section}_{setting['name']}"
+                                if widget_key in self.widgets:
+                                    widget = self.widgets[widget_key]
+                                    if isinstance(widget, QCheckBox):
+                                        value = str(widget.isChecked()).lower()
+                                    elif isinstance(widget, QSlider):
+                                        is_whole_number = '.' not in setting['comment']
+                                        if is_whole_number:
+                                            value = str(widget.value())
+                                            else:
+                                                value = f"{widget.value() / 1000:.6f}"
+                                    elif isinstance(widget, QComboBox):
+                                        value = widget.currentText()
+                                    elif isinstance(widget, QLineEdit):
+                                        value = widget.text()
+                                        if '.' not in setting['comment'] and value.replace('.', '').isdigit():
+                                            value = str(int(float(value)))
+                                    else:
+                                        continue
+                                    if "to" in setting['comment']:
+                                        numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
+                                        if len(numbers) >= 2:
+                                            try:
+                                                min_val, max_val = float(numbers[0]), float(numbers[1])
+                                                float_value = float(value)
+                                                if float_value < min_val or float_value > max_val:
+                                                    user_choice = QMessageBox.warning(
+                                                        self,
+                                                        "Value out of range",
+    def save_file(self, file_path, file_type):
+        try:
+            with open(file_path, 'r') as file:
+                lines = file.readlines()
+
+            for i, line in enumerate(lines):
+                if '=' in line and not line.strip().startswith('//'):
+                    key = line.split('=', 1)[0].strip().split(':')[0] if file_type == "GameSpecific" else line.split('=', 1)[0].strip().split('@')[0]
+                    for section, data in self.options.items():
+                        for setting in data["settings"]:
+                            if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
                                 widget_key = f"{section}_{setting['name']}"
                                 if widget_key in self.widgets:
                                     widget = self.widgets[widget_key]
@@ -317,8 +408,8 @@ class OptionsEditor(QMainWindow):
                                         if '.' not in setting['comment'] and value.replace('.', '').isdigit():
                                             value = str(int(float(value)))
                                     else:
-                                        continue  # Skip if we can't determine the widget type
-                                    # Check if the value is within the recommended range
+                                        continue
+
                                     if "to" in setting['comment']:
                                         numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
                                         if len(numbers) >= 2:
@@ -327,51 +418,52 @@ class OptionsEditor(QMainWindow):
                                                 float_value = float(value)
                                                 if float_value < min_val or float_value > max_val:
                                                     user_choice = QMessageBox.warning(
-                                                    self,
-                                                    "Value out of range",
-                                                    f"The value {value} for {setting['name']} is outside the recommended range ({min_val} to {max_val}). Do you want to proceed?",
-                                                    QMessageBox.Yes | QMessageBox.No,
-                                                    QMessageBox.No
-                                                )
+                                                        self,
+                                                        "Value out of range",
+                                                        f"The value {value} for {setting['name']} is outside the recommended range ({min_val} to {max_val}). Do you want to proceed?",
+                                                        QMessageBox.Yes | QMessageBox.No,
+                                                        QMessageBox.No
+                                                    )
                                                     if user_choice == QMessageBox.No:
                                                         continue
                                             except ValueError:
                                                 pass
 
-                                    lines[i] = f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+                                    if file_type == "GameSpecific":
+                                        lines[i] = f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+                                    else:  # GameAgnostic
+                                        lines[i] = f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 
-            with open(self.file_path, 'w') as file:
+            with open(file_path, 'w') as file:
                 file.writelines(lines)
-
             if self.read_only_action.isChecked():
                 os.chmod(self.file_path, stat.S_IREAD)
                 self.read_only = True
             else:
                 os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
                 self.read_only = False
-
             self.log(f"Options saved to {self.file_path}")
             QMessageBox.information(self, "Success", "Options saved successfully")
             self.reload_file()
         except Exception as e:
-            error_msg = f"Failed to save options: {str(e)}\n"
+            error_msg = f"Failed to save options to {file_path}: {str(e)}\n"
             error_msg += f"Error type: {type(e).__name__}\n"
             error_msg += f"Error args: {e.args}\n"
             QMessageBox.critical(self, "Error", error_msg)
-            self.log(error_msg)
+        self.log(error_msg)
+        raise
 
-    def reload_file(self):
-        if self.file_path:
-            self.parse_options_file()
-            self.display_options()
-            self.log("File reloaded")
+def reload_file(self):
+    if self.file_path and self.game_agnostic_file_path:
+        self.parse_options_file()
+        self.display_options()
+        self.log("Files reloaded")
 
 def main():
     app = QApplication(sys.argv)
     editor = OptionsEditor()
     editor.show()
     sys.exit(app.exec_())
-
 
 if __name__ == "__main__":
     main()
