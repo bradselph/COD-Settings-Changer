@@ -121,8 +121,6 @@ class OptionsEditor(QMainWindow):
             # Game-specific settings
             "VideoMemoryScale": "Adjusts the fraction of your GPU's memory used by the game. Higher values may improve texture quality but could cause instability.",
             "RendererWorkerCount": "Sets the number of CPU threads for handling rendering tasks. Higher values may improve performance on multi-core CPUs.",
-            "ConfigCloudStorageEnabled": "Enables cloud synchronization for non-hardware settings.",
-            "ConfigCloudSavegameEnabled": "Enables cloud synchronization for campaign save games.",
             "VoicePushToTalk": "When enabled, you need to press a key to activate your microphone in voice chat.",
             "AudioMix": "Selects from predefined audio mix presets for different listening environments.",
             "Volume": "Adjusts the overall game volume.",
@@ -251,13 +249,8 @@ class OptionsEditor(QMainWindow):
 
     def parse_options_file(self):
         self.options.clear()
-
-        # Parse game-specific file
         self.parse_file(self.file_path, "GameSpecific")
-
-        # Parse game-agnostic file
         self.parse_file(self.game_agnostic_file_path, "GameAgnostic")
-
         self.log(f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from both files")
 
     def parse_file(self, file_path, file_type):
@@ -270,7 +263,6 @@ class OptionsEditor(QMainWindow):
                 else:  # GameAgnostic
                     sections = [content]
                     section_names = ["GameAgnostic"]
-
                 for name, section in zip(section_names, sections):
                     if name not in self.options:
                         self.options[name] = {"settings": []}
@@ -305,11 +297,9 @@ class OptionsEditor(QMainWindow):
             scroll_area = QScrollArea()
             scroll_widget = QWidget()
             scroll_layout = QGridLayout()
-
             for i, setting in enumerate(data["settings"]):
                 label = QLabel(f"{setting['name']}:")
                 scroll_layout.addWidget(label, i, 0)
-
                 value = setting['value'].strip('"')
                 if value.lower() in ('true', 'false'):
                     widget = QCheckBox()
@@ -322,23 +312,21 @@ class OptionsEditor(QMainWindow):
                                 min_val, max_val = float(numbers[0]), float(numbers[1])
                                 is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
                                 if is_whole_number:
-                                    widget = QSlider(Qt.Horizontal)
+                                    widget = NoScrollSlider(Qt.Horizontal)
                                     widget.setRange(int(min_val), int(max_val))
                                     widget.setValue(int(float(value)))
                                     widget.setTickPosition(QSlider.TicksBelow)
                                     widget.setTickInterval(max(1, int((max_val - min_val) / 10)))
                                 else:
-                                    widget = QSlider(Qt.Horizontal)
+                                    widget = NoScrollSlider(Qt.Horizontal)
                                     widget.setRange(int(min_val * 1000), int(max_val * 1000))
                                     widget.setValue(int(float(value) * 1000))
                                     widget.setTickPosition(QSlider.TicksBelow)
                                     widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10)
-
                                 value_label = QLabel(value)
                                 scroll_layout.addWidget(value_label, i, 2)
-
                                 widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-                                                        self.update_slider_value(v, label, min_v, max_v, whole))
+                                                            self.update_slider_value(v, label, min_v, max_v, whole))
                             except ValueError:
                                 widget = QLineEdit(value)
                                 validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
@@ -362,20 +350,16 @@ class OptionsEditor(QMainWindow):
                         widget = QLineEdit(value)
                 else:
                     widget = QLineEdit(value)
-
                 scroll_layout.addWidget(widget, i, 1)
-                widget.setEnabled(setting['editable'])
+                widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY"))
                 self.widgets[f"{section}_{setting['name']}"] = widget
-
                 tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
                 tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
-                widget.setToolTip(tooltip_text)  # Corrected line
-
+                widget.setToolTip(tooltip_text)
                 comment = QLabel(setting['comment'])
                 scroll_layout.addWidget(comment, i, 3)
                 file_type_label = QLabel(f"({setting['file_type']})")
                 scroll_layout.addWidget(file_type_label, i, 4)
-
             scroll_widget.setLayout(scroll_layout)
             scroll_area.setWidget(scroll_widget)
             scroll_area.setWidgetResizable(True)
@@ -405,7 +389,6 @@ class OptionsEditor(QMainWindow):
         if not self.file_path or not self.game_agnostic_file_path:
             QMessageBox.critical(self, "Error", "One or both files are not loaded")
             return
-
         if self.read_only:
             new_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Specific File As", os.path.dirname(self.file_path),
                                                            "CST Files (*.cst);;All Files (*)")
@@ -416,11 +399,9 @@ class OptionsEditor(QMainWindow):
             self.file_path = new_file_path
             self.game_agnostic_file_path = new_game_agnostic_file_path
             self.read_only = False
-
         try:
             self.save_file(self.file_path, "GameSpecific")
             self.save_file(self.game_agnostic_file_path, "GameAgnostic")
-
             if self.read_only_action.isChecked():
                 os.chmod(self.file_path, stat.S_IREAD)
                 os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
@@ -429,7 +410,6 @@ class OptionsEditor(QMainWindow):
                 os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
                 os.chmod(self.game_agnostic_file_path, stat.S_IWRITE | stat.S_IREAD)
                 self.read_only = False
-
             self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
             QMessageBox.information(self, "Success", "Options saved successfully")
             self.reload_file()
@@ -444,7 +424,6 @@ class OptionsEditor(QMainWindow):
         try:
             with open(file_path, 'r') as file:
                 lines = file.readlines()
-
             for i, line in enumerate(lines):
                 if '=' in line and not line.strip().startswith('//'):
                     key = line.split('=', 1)[0].strip().split(':')[0] if file_type == "GameSpecific" else line.split('=', 1)[0].strip().split('@')[0]
@@ -470,7 +449,6 @@ class OptionsEditor(QMainWindow):
                                             value = str(int(float(value)))
                                     else:
                                         continue
-
                                     if "to" in setting['comment']:
                                         numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
                                         if len(numbers) >= 2:
@@ -489,12 +467,10 @@ class OptionsEditor(QMainWindow):
                                                         continue
                                             except ValueError:
                                                 pass
-
                                     if file_type == "GameSpecific":
                                         lines[i] = f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
                                     else:  # GameAgnostic
                                         lines[i] = f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-
             with open(file_path, 'w') as file:
                 file.writelines(lines)
             if self.read_only_action.isChecked():
