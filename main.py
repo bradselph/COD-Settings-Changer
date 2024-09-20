@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QToolTip)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget)
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 import sys
@@ -30,14 +30,9 @@ class GameSelector(QDialog):
 		self.setLayout(layout)
 
 class LogWindow(QDockWidget):
-	def __init__(self):
-		super ().__init__ ()
-		self.setWindowTitle ("Call of Duty Options Editor")
-		self.setGeometry (100, 100, 1000, 600)
-		
-		self.log_window = LogWindow (self)
-		self.addDockWidget (Qt.BottomDockWidgetArea, self.log_window)
-		self.log_window.show ()
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("Log")
 		self.setAllowedAreas(Qt.AllDockWidgetAreas)
 
 		content = QWidget()
@@ -51,13 +46,9 @@ class LogWindow(QDockWidget):
 		layout.addWidget(save_button)
 
 		self.setWidget(content)
-		
-	def log(self, message):
-		if hasattr (self, 'log_window'):
-			self.log_window.log (message)
-		else:
-			print (message)
 
+	def log(self, message):
+		self.text_edit.append(message)
 
 	def save_log(self):
 		file_name, _ = QFileDialog.getSaveFileName(self, "Save Log", "", "Log Files (*.log);;All Files (*)")
@@ -65,6 +56,10 @@ class LogWindow(QDockWidget):
 			with open(file_name, 'w') as f:
 				f.write(self.text_edit.toPlainText())
 			self.log(f"Log saved to {file_name}")
+	def closeEvent(self, event):
+		if isinstance(self.parent(), OptionsEditor):
+			self.parent().show_log_action.setChecked(False)
+			super().closeEvent(event)
 
 class NoScrollSlider(QSlider):
 	def wheelEvent(self, event):
@@ -89,16 +84,16 @@ class OptionsEditor(QMainWindow):
 			"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
 		]
 
-		try:
+		self.log_window = LogWindow(self)
 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-		self.log_window.show()  # Show log window by default for debugging
-			self.log("Initializing OptionsEditor")
+		self.log_window.show()
+		self.log_window_detached = False
+		self.log_window.topLevelChanged.connect(self.on_log_window_detached)
 
 		self.create_menu()
 		self.create_widgets()
 		self.create_help_texts()
 
-		# Set tooltip style
 		self.setStyleSheet("""
 			QToolTip {
 				background-color: #2a82da;
@@ -110,13 +105,18 @@ class OptionsEditor(QMainWindow):
 
 		self.select_game()
 
+	def log(self, message):
+		if hasattr(self, 'log_window'):
+			self.log_window.log(message)
+		else:
+			print(message)  # Fallback to print if log_window is not available
 	def create_menu(self):
 		menu_bar = self.menuBar()
 
 		file_menu = menu_bar.addMenu("File")
 		file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
 		file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
-		file_menu.addAction(QAction("Reload", self, triggered=self.load_file))
+		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
 		file_menu.addSeparator()
 		file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
@@ -219,64 +219,81 @@ class OptionsEditor(QMainWindow):
 		self.tab_widget = QTabWidget()
 		layout.addWidget(self.tab_widget)
 		central_widget.setLayout(layout)
-		except Exception as e:
-			self.log(f"Error during initialization: {str(e)}")
-			QMessageBox.critical(self, "Initialization Error", f"An error occurred during initialization: {str(e)}")
 
 	def select_game(self):
 		try:
-		dialog = GameSelector(self)
-		if dialog.exec_():
-			self.game = "MW3/Warzone 2024"
-			self.selected_game = self.game
-			self.log(f"Selected game: {self.game}")
-			self.load_file(auto=True)
-
-	def toggle_log_window(self, checked):
-		if checked:
-			self.log_window.show()
-		else:
+			dialog = GameSelector(self)
+			if dialog.exec_():
+				self.game = "MW3/Warzone 2024"
+				self.selected_game = self.game
+				self.log(f"Selected game: {self.game}")
+				self.load_file(auto=True)
+			else:
 				self.log("Game selection cancelled")
-				self.close()  # Close the application if no game is selected
+				self.close()
 		except Exception as e:
 			self.log(f"Error in select_game: {str(e)}")
 			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
 
+	def on_log_window_detached(self, floating):
+		self.log_window_detached = floating
+
+	def toggle_log_window(self, checked):
+		if checked:
+			if not self.log_window.isVisible():
+				if self.log_window_detached:
+					self.log_window = LogWindow(self)
+					self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+					self.log_window.topLevelChanged.connect(self.on_log_window_detached)
+					self.log_window_detached = False
+				self.log_window.show()
+			elif self.log_window_detached:
+				self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+				self.log_window_detached = False
+		else:
+			self.log_window.close()
+
 	def load_file(self, auto=False):
 		try:
 			self.log("Starting load_file method")
-		if auto:
-			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-			file_name = "options.4.cod23.cst"
-			self.file_path = os.path.join(default_path, file_name)
-			self.game_agnostic_file_path = os.path.join(default_path, "gamerprofile.0.BASE.cst")
+			if auto:
+				default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
+				file_name = "options.4.cod23.cst"
+				self.file_path = os.path.join(default_path, file_name)
+				self.game_agnostic_file_path = os.path.join(default_path, "gamerprofile.0.BASE.cst")
 
-			if not os.path.exists(self.file_path):
+				if not os.path.exists(self.file_path):
 					self.log(f"File not found: {self.file_path}")
-				QMessageBox.warning(self, "File Not Found", f"Could not find {file_name}. Please select it manually.")
-				self.file_path = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
-															 "CST Files (*.cst);;All Files (*)")[0]
+					QMessageBox.warning(self, "File Not Found", f"Could not find {file_name}. Please select it manually.")
+					self.file_path = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
+																 "CST Files (*.cst);;All Files (*)")[0]
 
-			if not os.path.exists(self.game_agnostic_file_path):
+				if not os.path.exists(self.game_agnostic_file_path):
 					self.log(f"File not found: {self.game_agnostic_file_path}")
-				QMessageBox.warning(self, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
-				self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst", default_path,
+					QMessageBox.warning(self, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
+					self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst", default_path,
+																			   "CST Files (*.cst);;All Files (*)")[0]
+			else:
+				default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
+				self.file_path = QFileDialog.getOpenFileName(self, "Select options.4.cod23.cst file", default_path,
+															 "CST Files (*.cst);;All Files (*)")[0]
+				self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst file", default_path,
 																		   "CST Files (*.cst);;All Files (*)")[0]
-		else:
-			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-			self.file_path = QFileDialog.getOpenFileName(self, "Select options.4.cod23.cst file", default_path,
-														 "CST Files (*.cst);;All Files (*)")[0]
-			self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst file", default_path,
-																	   "CST Files (*.cst);;All Files (*)")[0]
 
-		if self.file_path and self.game_agnostic_file_path:
+			if self.file_path and self.game_agnostic_file_path:
 				self.log(f"Loading files: {self.file_path} and {self.game_agnostic_file_path}")
-			self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
-			if self.read_only:
-				QMessageBox.information(self, "Read-only File",
-										"One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
-			self.parse_options_file()
-			self.display_options()
+				self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
+				if self.read_only:
+					QMessageBox.information(self, "Read-only File",
+											"One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
+				self.parse_options_file()
+				self.display_options()
+			else:
+				self.log("File selection cancelled")
+				self.close()
+		except Exception as e:
+			self.log(f"Error in load_file: {str(e)}")
+			QMessageBox.critical(self, "File Loading Error", f"An error occurred while loading files: {str(e)}")
 
 	def parse_options_file(self):
 		self.options.clear()
@@ -297,26 +314,25 @@ class OptionsEditor(QMainWindow):
 				for name, section in zip(section_names, sections):
 					if name not in self.options:
 						self.options[name] = {"settings": []}
-						lines = section.strip().split('\n')
-						for line in lines:
-							if '=' in line and not line.strip().startswith('//'):
-								key, value = line.split('=', 1)
-								key = key.split(':')[0].strip() if file_type == "GameSpecific" else key.split('@')[0].strip()
-								value = value.strip().strip('"')
-								comment = ""
-								if '//' in value:
-									value, comment = value.split('//', 1)
-									value = value.strip()
-									comment = comment.strip()
-								self.options[name]["settings"].append({
-										"name": key,
-										"value": value,
-										"comment": comment,
-										"editable": not line.strip().startswith("// DO NOT MODIFY"),
-										"file_type": file_type
-								})
-			self.log(
-					f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from {self.file_path}")
+					lines = section.strip().split('\n')
+					for line in lines:
+						if '=' in line and not line.strip().startswith('//'):
+							key, value = line.split('=', 1)
+							key = key.split(':')[0].strip() if file_type == "GameSpecific" else key.split('@')[0].strip()
+							value = value.strip().strip('"')
+							comment = ""
+							if '//' in value:
+								value, comment = value.split('//', 1)
+								value = value.strip()
+								comment = comment.strip()
+							self.options[name]["settings"].append({
+									"name": key,
+									"value": value,
+									"comment": comment,
+									"editable": not line.strip().startswith("// DO NOT MODIFY"),
+									"file_type": file_type
+							})
+			self.log(f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from {file_path}")
 		except Exception as e:
 			QMessageBox.critical(self, "Error", f"Failed to parse options file {file_path}: {str(e)}")
 			self.log(f"Error parsing options file {file_path}: {str(e)}")
@@ -375,7 +391,7 @@ class OptionsEditor(QMainWindow):
 								value_label = QLabel(value)
 								scroll_layout.addWidget(value_label, i, 2)
 								widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-															self.update_slider_value(v, label, min_v, max_v, whole))
+												self.update_slider_value(v, label, min_v, max_v, whole))
 							except ValueError:
 								widget = QLineEdit(value)
 								validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
@@ -414,6 +430,7 @@ class OptionsEditor(QMainWindow):
 			scroll_area.setWidgetResizable(True)
 			self.tab_widget.addTab(scroll_area, section)
 		self.update_widget_states()
+
 	def update_slider_value(self, value, label, min_val, max_val, whole_number):
 		if whole_number:
 			real_value = value
@@ -428,7 +445,7 @@ class OptionsEditor(QMainWindow):
 				if widget_key in self.widgets:
 					widget = self.widgets[widget_key]
 					widget.setEnabled(setting["editable"])
-				
+
 	def save_options(self):
 		self.log("Starting save_options method")
 		if not self.file_path or not self.game_agnostic_file_path:
@@ -464,6 +481,7 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error args: {e.args}\n"
 			QMessageBox.critical(self, "Error", error_msg)
 			self.log(error_msg)
+
 	def save_file(self, file_path, file_type):
 		try:
 			with open(file_path, 'r') as file:
@@ -501,11 +519,11 @@ class OptionsEditor(QMainWindow):
 												float_value = float(value)
 												if float_value < min_val or float_value > max_val:
 													user_choice = QMessageBox.warning(
-															self,
-															"Value out of range",
-															f"The value {value} for {setting['name']} is outside the recommended range ({min_val} to {max_val}). Do you want to proceed?",
-															QMessageBox.Yes | QMessageBox.No,
-															QMessageBox.No
+														self,
+														"Value out of range",
+														f"The value {value} for {setting['name']} is outside the recommended range ({min_val} to {max_val}). Do you want to proceed?",
+														QMessageBox.Yes | QMessageBox.No,
+														QMessageBox.No
 													)
 													if user_choice == QMessageBox.No:
 														continue
@@ -517,26 +535,17 @@ class OptionsEditor(QMainWindow):
 										lines[i] = f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 			with open(file_path, 'w') as file:
 				file.writelines(lines)
-			if self.read_only_action.isChecked():
-				os.chmod(self.file_path, stat.S_IREAD)
-				self.read_only = True
-			else:
-				os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
-				self.read_only = False
-			self.log("File selection cancelled")
-				self.close()  # Close the application if no files are selected
 		except Exception as e:
-			self.log(f"Error in load_file: {str(e)}")
 			error_msg = f"Failed to save options to {file_path}: {str(e)}\n"
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
-			QMessageBox.critical(self, "File Loading Error", f"An error occurred while loading files: {str(e)}")
+			raise Exception(error_msg)
 
-def reload_file(self):
-	if self.file_path and self.game_agnostic_file_path:
-		self.parse_options_file()
-		self.display_options()
-		self.log("Files reloaded")
+	def reload_file(self):
+		if self.file_path and self.game_agnostic_file_path:
+			self.parse_options_file()
+			self.display_options()
+			self.log("Files reloaded")
 
 def main():
 	app = QApplication(sys.argv)
