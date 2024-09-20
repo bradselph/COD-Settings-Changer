@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout)
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
@@ -311,21 +311,32 @@ class OptionsEditor(QMainWindow):
 				scroll_layout.addWidget(label, i, 0)
 				value = setting['value'].strip('"')
 				widget = self.create_widget(setting, value)
-				scroll_layout.addWidget(widget, i, 1)
+				if isinstance(widget, tuple):  # For sliders with value labels
+					slider, value_label = widget
+					slider_layout = QHBoxLayout()
+					slider_layout.addWidget(slider)
+					slider_layout.addWidget(value_label)
+					scroll_layout.addLayout(slider_layout, i, 1)
+				else:
+					scroll_layout.addWidget(widget, i, 1)
 				widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields)
 				self.widgets[f"{section}_{setting['name']}"] = widget
 				tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
 				tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
-				widget.setToolTip(tooltip_text)
+				if isinstance(widget, tuple):
+					slider.setToolTip(tooltip_text)
+					value_label.setToolTip(tooltip_text)
+				else:
+					widget.setToolTip(tooltip_text)
 				comment = QLabel(setting['comment'])
 				scroll_layout.addWidget(comment, i, 3)
 				file_type_label = QLabel(f"({setting['file_type']})")
 				scroll_layout.addWidget(file_type_label, i, 4)
-				scroll_widget.setLayout(scroll_layout)
-				scroll_area.setWidget(scroll_widget)
-				scroll_area.setWidgetResizable(True)
-				self.tab_widget.addTab(scroll_area, section)
-				self.update_widget_states()
+			scroll_widget.setLayout(scroll_layout)
+			scroll_area.setWidget(scroll_widget)
+			scroll_area.setWidgetResizable(True)
+			self.tab_widget.addTab(scroll_area, section)
+		self.update_widget_states()
 
 	def create_widget(self, setting, value):
 		if setting['name'] in self.non_editable_fields:
@@ -342,7 +353,7 @@ class OptionsEditor(QMainWindow):
 			widget.setChecked(value.lower() == 'true')
 			widget.stateChanged.connect(self.set_unsaved_changes)
 		elif re.match(r'^-?\d+(\.\d+)?$', value):
-			widget = self.create_slider_widget(setting, value)
+			return self.create_slider_widget(setting, value)
 			if isinstance(widget, QSlider):
 				widget.valueChanged.connect(self.set_unsaved_changes)
 			else:
@@ -386,15 +397,18 @@ class OptionsEditor(QMainWindow):
 					else:
 						widget.setRange(int(min_val * 1000), int(max_val * 1000))
 						widget.setValue(int(float(value) * 1000))
-						widget.setTickPosition(QSlider.TicksBelow)
-						widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
-						value_label = QLabel(value)
-						widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-													self.update_slider_value(v, label, min_v, max_v, whole))
-					return widget
+					widget.setTickPosition(QSlider.TicksBelow)
+					widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
+					value_label = QLabel(value)
+					widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
+												self.update_slider_value(v, label, min_v, max_v, whole))
+					widget.valueChanged.connect(self.set_unsaved_changes)
+					return widget, value_label
 				except ValueError:
 					pass
-		return QLineEdit(value)
+		widget = QLineEdit(value)
+		widget.textChanged.connect(self.set_unsaved_changes)
+		return widget
 
 	def update_slider_value(self, value, label, min_val, max_val, whole_number):
 		if whole_number:
@@ -409,7 +423,10 @@ class OptionsEditor(QMainWindow):
 				widget_key = f"{section}_{setting['name']}"
 				if widget_key in self.widgets:
 					widget = self.widgets[widget_key]
-					widget.setEnabled(setting["editable"])
+					if isinstance(widget, tuple):
+						widget[0].setEnabled(setting["editable"])
+					else:
+						widget.setEnabled(setting["editable"])
 
 	def set_unsaved_changes(self):
 		self.unsaved_changes = True
@@ -479,7 +496,9 @@ class OptionsEditor(QMainWindow):
 			raise Exception(error_msg)
 
 	def get_widget_value(self, widget):
-		if isinstance(widget, QCheckBox):
+		if isinstance(widget, tuple):  # For sliders with value labels
+			return widget[1].text()
+		elif isinstance(widget, QCheckBox):
 			return str(widget.isChecked()).lower()
 		elif isinstance(widget, QSlider):
 			return str(widget.value() / 1000) if widget.maximum() > 1000 else str(widget.value())
