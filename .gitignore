@@ -9,3 +9,4 @@ System
 Mouse and Gamepad
 /players
 *.log
+__pycache__/help_texts.cpython-312.pyc

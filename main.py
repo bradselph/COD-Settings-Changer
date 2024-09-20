@@ -2,10 +2,12 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout)
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
+from PyQt5.QtGui import QIcon
+
 import sys
 import os
 import re
@@ -21,15 +23,30 @@ class GameSelector(QDialog):
 		label = QLabel("Choose the game you want to modify settings for:")
 		layout.addWidget(label)
 
-		mw2_button = QPushButton("MW2/Warzone 2023")
-		mw2_button.setEnabled(False)
-		layout.addWidget(mw2_button)
+		self.mw2_button = QPushButton("MW2/Warzone 2023")
+		self.mw2_button.clicked.connect(lambda: self.select_game("MW2/Warzone 2023"))
+		layout.addWidget(self.mw2_button)
 
-		mw3_button = QPushButton("MW3/Warzone 2024")
-		mw3_button.clicked.connect(self.accept)
-		layout.addWidget(mw3_button)
+		self.mw3_button = QPushButton("MW3/Warzone 2024")
+		self.mw3_button.clicked.connect(lambda: self.select_game("MW3/Warzone 2024"))
+		layout.addWidget(self.mw3_button)
 
+		self.selected_game = None
 		self.setLayout(layout)
+
+		self.setup_window_flags()
+
+	def setup_window_flags(self):
+		self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
+
+	def showEvent(self, event):
+		super().showEvent(event)
+		self.raise_()
+		self.activateWindow()
+
+	def select_game(self, game):
+		self.selected_game = game
+		self.accept()
 
 class LogWindow(QDockWidget):
 	def __init__(self, parent=None):
@@ -69,11 +86,22 @@ class NoScrollSlider(QSlider):
 	def wheelEvent(self, event):
 		event.ignore()
 
+class NoScrollComboBox(QComboBox):
+	def wheelEvent(self, event):
+		event.ignore()
+
 class OptionsEditor(QMainWindow):
 	def __init__(self):
 		super().__init__()
 		self.setWindowTitle("Call of Duty Options Editor")
 		self.setGeometry(100, 100, 1000, 600)
+		if getattr(sys, 'frozen', False):
+			application_path = sys._MEIPASS
+		else:
+			application_path = os.path.dirname(os.path.abspath(__file__))
+		icon_path = os.path.join(application_path, 'gear_icon.ico')
+		self.setWindowIcon(QIcon(icon_path))
+
 
 		self.options = {}
 		self.widgets = {}
@@ -83,14 +111,15 @@ class OptionsEditor(QMainWindow):
 		self.game = ""
 		self.selected_game = ""
 		self.non_editable_fields = [
-			"SoundOutputDevice", "SoundInputDevice", "VoiceOutputDevice", "VoiceInputDevice",
-			"Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
-			"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
+				"SoundOutputDevice", "SoundInputDevice", "VoiceOutputDevice", "VoiceInputDevice",
+				"Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
+				"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
 		]
+		self.unsaved_changes = False
 
 		self.log_window = LogWindow(self)
 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-		self.log_window.show()
+		self.log_window.hide()
 
 		self.log_window_detached = False
 		self.log_window.topLevelChanged.connect(self.on_log_window_detached)
@@ -115,6 +144,7 @@ class OptionsEditor(QMainWindow):
 			self.log_window.log(message)
 		else:
 			print(message)
+
 	def create_menu(self):
 		menu_bar = self.menuBar()
 
@@ -122,6 +152,7 @@ class OptionsEditor(QMainWindow):
 		file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
 		file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
 		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
+		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))
 		file_menu.addSeparator()
 		file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
@@ -147,7 +178,7 @@ class OptionsEditor(QMainWindow):
 		try:
 			dialog = GameSelector(self)
 			if dialog.exec_():
-				self.game = "MW3/Warzone 2024"
+				self.game = dialog.selected_game
 				self.selected_game = self.game
 				self.log(f"Selected game: {self.game}")
 				self.load_file(auto=True)
@@ -157,6 +188,12 @@ class OptionsEditor(QMainWindow):
 		except Exception as e:
 			self.log(f"Error in select_game: {str(e)}")
 			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
+
+	def change_game(self):
+		if self.check_unsaved_changes():
+			self.select_game()
+			self.load_file(auto=True)
+			self.log(f"Changed game to: {self.game}")
 
 	def on_log_window_detached(self, floating):
 		self.log_window_detached = floating
@@ -177,67 +214,96 @@ class OptionsEditor(QMainWindow):
 		else:
 			self.log_window.close()
 
+	def show_log_window(self):
+		if not self.log_window.isVisible():
+			if self.log_window_detached:
+				self.log_window = LogWindow(self)
+				self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+				self.log_window.topLevelChanged.connect(self.on_log_window_detached)
+				self.log_window_detached = False
+			self.log_window.show()
+		elif self.log_window_detached:
+			self.log_window.setFloating(False)
+			self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+			self.log_window_detached = False
+
+	def hide_log_window(self):
+		self.log_window.close()
+
 	def load_file(self, auto=False):
 		try:
 			self.log("Starting load_file method")
-			if auto:
-				default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-				file_name = "options.4.cod23.cst"
-				self.file_path = os.path.join(default_path, file_name)
-				self.game_agnostic_file_path = os.path.join(default_path, "gamerprofile.0.BASE.cst")
+			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
+			file_names = {
+					"game_specific": "options.4.cod23.cst" if self.game == "MW3/Warzone 2024" else "options.3.cod22.cst",
+					"game_agnostic": "gamerprofile.0.BASE.cst"
+			}
 
-				if not os.path.exists(self.file_path):
-					self.log(f"File not found: {self.file_path}")
-					msg_box = QMessageBox(QMessageBox.Warning, "File Not Found", f"Could not find {file_name}. Please select it manually.")
-					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
-					msg_box.show()
-					msg_box.activateWindow()
-					msg_box.raise_()
-					msg_box.exec_()
-					self.file_path = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
-																 "CST Files (*.cst);;All Files (*)")[0]
+			files_to_load = {}
+			for file_type, file_name in file_names.items():
+				file_path = os.path.join(default_path, file_name)
+				if not auto or not os.path.exists(file_path):
+					file_path = self.get_file_path(file_type, file_name, default_path)
 
-				if not os.path.exists(self.game_agnostic_file_path):
-					self.log(f"File not found: {self.game_agnostic_file_path}")
-					msg_box = QMessageBox(QMessageBox.Warning, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
-					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
-					msg_box.show()
-					msg_box.activateWindow()
-					msg_box.raise_()
-					msg_box.exec_()
-					self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst", default_path,
-																			   "CST Files (*.cst);;All Files (*)")[0]
-			else:
-				default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-				self.file_path = QFileDialog.getOpenFileName(self, "Select options.4.cod23.cst file", default_path,
-															 "CST Files (*.cst);;All Files (*)")[0]
-				self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst file", default_path,
-																		   "CST Files (*.cst);;All Files (*)")[0]
+				if file_path:
+					files_to_load[file_type] = file_path
+				else:
+					self.log(f"File selection cancelled for {file_type}")
+					return  # Exit the method if user cancels any file selection
 
-			if self.file_path and self.game_agnostic_file_path:
+			if len(files_to_load) == 2:  # Both files were selected
+				self.file_path = files_to_load["game_specific"]
+				self.game_agnostic_file_path = files_to_load["game_agnostic"]
+
 				self.log(f"Loading files: {self.file_path} and {self.game_agnostic_file_path}")
 				self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
 				if self.read_only:
-					msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
-										  "One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
-					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
-					msg_box.show()
-					msg_box.activateWindow()
-					msg_box.raise_()
-					msg_box.exec_()
+					self.show_read_only_message()
 				self.parse_options_file()
 				self.display_options()
+				self.unsaved_changes = False
 			else:
-				self.log("File selection cancelled")
-				self.close()
+				self.log("File selection incomplete")
+				self.show_error_message("File Selection", "Both files are required to proceed. Please select both files.")
 		except Exception as e:
 			self.log(f"Error in load_file: {str(e)}")
-			msg_box = QMessageBox(QMessageBox.Critical, "File Loading Error", f"An error occurred while loading files: {str(e)}")
-			msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
-			msg_box.show()
-			msg_box.activateWindow()
-			msg_box.raise_()
-			msg_box.exec_()
+			self.show_error_message("File Loading Error", f"An error occurred while loading files: {str(e)}")
+
+	def get_file_path(self, file_type, file_name, default_path):
+		message = (f"Please select the {file_type} file:\n"
+				   f"{file_name}\n\n"
+				   f"This file is typically located in:\n"
+				   f"{default_path}")
+
+		msg_box = QMessageBox(QMessageBox.Information, "Select File", message)
+		msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+		msg_box.setDefaultButton(QMessageBox.Ok)
+		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+
+		result = msg_box.exec_()
+		if result == QMessageBox.Ok:
+			file_path, _ = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path, "CST Files (*.cst);;All Files (*)")
+			if file_path:
+				return file_path
+			else:
+				self.log(f"No file selected for {file_type}")
+				return None
+		else:
+			self.log(f"File selection cancelled for {file_type}")
+			return None
+
+	def show_read_only_message(self):
+		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
+							  "One or both of the selected files are read-only. "
+							  "You can make changes, but you'll need to save them as new files "
+							  "or remove the read-only attribute.")
+		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+		msg_box.exec_()
+
+	def show_error_message(self, title, message):
+		msg_box = QMessageBox(QMessageBox.Critical, title, message)
+		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+		msg_box.exec_()
 
 	def parse_options_file(self):
 		self.options.clear()
@@ -278,7 +344,7 @@ class OptionsEditor(QMainWindow):
 							})
 			self.log(f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from {file_path}")
 		except Exception as e:
-			QMessageBox.critical(self, "Error", f"Failed to parse options file {file_path}: {str(e)}")
+			self.show_error_message("Error", f"Failed to parse options file {file_path}: {str(e)}")
 			self.log(f"Error parsing options file {file_path}: {str(e)}")
 
 	def display_options(self):
@@ -292,79 +358,32 @@ class OptionsEditor(QMainWindow):
 				label = QLabel(f"{setting['name']}:")
 				scroll_layout.addWidget(label, i, 0)
 				value = setting['value'].strip('"')
-				if setting['name'] in self.non_editable_fields:
-					widget = QLineEdit(value)
-					widget.setReadOnly(True)
-				elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate"]:
-					widget = QComboBox()
-					options = setting['comment'].split("one of ")[1].strip("[]").split(", ")
-					widget.addItems(options)
-					widget.setCurrentText(value)
-				elif setting['name'] == "Resolution":
-					widget = QComboBox()
-					options = ["1920x1080", "2560x1440", "3840x2160"]
-					widget.addItems(options)
-					widget.setCurrentText(value)
-				elif setting['name'] == "RefreshRate":
-					widget = QComboBox()
-					options = ["60 Hz", "120 Hz"]
-					widget.addItems(options)
-					widget.setCurrentText(value)
-				elif value.lower() in ('true', 'false'):
-					widget = QCheckBox()
-					widget.setChecked(value.lower() == 'true')
-				elif re.match(r'^-?\d+(\.\d+)?$', value):
-					if "to" in setting['comment']:
-						numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
-						if len(numbers) >= 2:
-							try:
-								min_val, max_val = float(numbers[0]), float(numbers[1])
-								is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
-								if is_whole_number:
-									widget = NoScrollSlider(Qt.Horizontal)
-									widget.setRange(int(min_val), int(max_val))
-									widget.setValue(int(float(value)))
-									widget.setTickPosition(QSlider.TicksBelow)
-									widget.setTickInterval(max(1, int((max_val - min_val) / 10)))
-								else:
-									widget = NoScrollSlider(Qt.Horizontal)
-									widget.setRange(int(min_val * 1000), int(max_val * 1000))
-									widget.setValue(int(float(value) * 1000))
-									widget.setTickPosition(QSlider.TicksBelow)
-									widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10)
-								value_label = QLabel(value)
-								scroll_layout.addWidget(value_label, i, 2)
-								widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-												self.update_slider_value(v, label, min_v, max_v, whole))
-							except ValueError:
-								widget = QLineEdit(value)
-								validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-								widget.setValidator(validator)
-						else:
-							widget = QLineEdit(value)
-							validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-							widget.setValidator(validator)
-					else:
-						widget = QLineEdit(value)
-						validator = QRegExpValidator(QRegExp(r'^-?\d+(\.\d+)?$'))
-						widget.setValidator(validator)
-				elif "one of" in setting['comment']:
-					matches = re.findall(r'\[(.*?)\]', setting['comment'])
-					if matches:
-						options = matches[0].split(', ')
-						widget = QComboBox()
-						widget.addItems(options)
-						widget.setCurrentText(value)
-					else:
-						widget = QLineEdit(value)
+				widget = self.create_widget(setting, value)
+				if isinstance(widget, tuple):  # For sliders with value labels
+					slider, value_label = widget
+					slider_layout = QHBoxLayout()
+					slider_layout.addWidget(slider)
+					slider_layout.addWidget(value_label)
+					scroll_layout.addLayout(slider_layout, i, 1)
+					self.widgets[f"{section}_{setting['name']}"] = {"slider": slider, "value_label": value_label}
 				else:
-					widget = QLineEdit(value)
-				scroll_layout.addWidget(widget, i, 1)
-				widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields)
-				self.widgets[f"{section}_{setting['name']}"] = widget
+					scroll_layout.addWidget(widget, i, 1)
+					self.widgets[f"{section}_{setting['name']}"] = {"widget": widget}
+
+				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+				if isinstance(widget, tuple):
+					slider.setEnabled(is_editable)
+					value_label.setEnabled(is_editable)
+				else:
+					widget.setEnabled(is_editable)
+
 				tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
 				tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
-				widget.setToolTip(tooltip_text)
+				if isinstance(widget, tuple):
+					slider.setToolTip(tooltip_text)
+					value_label.setToolTip(tooltip_text)
+				else:
+					widget.setToolTip(tooltip_text)
 				comment = QLabel(setting['comment'])
 				scroll_layout.addWidget(comment, i, 3)
 				file_type_label = QLabel(f"({setting['file_type']})")
@@ -374,6 +393,78 @@ class OptionsEditor(QMainWindow):
 			scroll_area.setWidgetResizable(True)
 			self.tab_widget.addTab(scroll_area, section)
 		self.update_widget_states()
+
+	def create_widget(self, setting, value):
+		if setting['name'] in self.non_editable_fields:
+			widget = QLineEdit(value)
+			widget.setReadOnly(True)
+		elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate", "Resolution", "RefreshRate"]:
+			widget = NoScrollComboBox()
+			options = self.get_options_for_combobox(setting)
+			widget.addItems(options)
+			widget.setCurrentText(value)
+			widget.currentTextChanged.connect(self.set_unsaved_changes)
+		elif value.lower() in ('true', 'false'):
+			widget = QCheckBox()
+			widget.setChecked(value.lower() == 'true')
+			widget.stateChanged.connect(self.set_unsaved_changes)
+		elif re.match(r'^-?\d+(\.\d+)?$', value):
+			return self.create_slider_widget(setting, value)
+			if isinstance(widget, QSlider):
+				widget.valueChanged.connect(self.set_unsaved_changes)
+			else:
+				widget.textChanged.connect(self.set_unsaved_changes)
+		elif "one of" in setting['comment']:
+			widget = NoScrollComboBox()
+			options = re.findall(r'\[(.*?)\]', setting['comment'])
+			if options:
+				widget.addItems(options[0].split(', '))
+				widget.setCurrentText(value)
+				widget.currentTextChanged.connect(self.set_unsaved_changes)
+			else:
+				widget = QLineEdit(value)
+				widget.textChanged.connect(self.set_unsaved_changes)
+		else:
+			widget = QLineEdit(value)
+			widget.textChanged.connect(self.set_unsaved_changes)
+		return widget
+
+	def get_options_for_combobox(self, setting):
+		if setting['name'] == "VoiceChatEffect":
+			return setting['comment'].split("one of ")[1].strip("[]").split(", ")
+		elif setting['name'] == "TargetRefreshRate":
+			return ["60 Hz", "120 Hz"]
+		elif setting['name'] == "Resolution":
+			return ["1920x1080", "2560x1440", "3840x2160"]
+		elif setting['name'] == "RefreshRate":
+			return ["60 Hz", "120 Hz"]
+
+	def create_slider_widget(self, setting, value):
+		if "to" in setting['comment']:
+			numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
+			if len(numbers) >= 2:
+				try:
+					min_val, max_val = float(numbers[0]), float(numbers[1])
+					is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
+					widget = NoScrollSlider(Qt.Horizontal)
+					if is_whole_number:
+						widget.setRange(int(min_val), int(max_val))
+						widget.setValue(int(float(value)))
+					else:
+						widget.setRange(int(min_val * 1000), int(max_val * 1000))
+						widget.setValue(int(float(value) * 1000))
+					widget.setTickPosition(QSlider.TicksBelow)
+					widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
+					value_label = QLabel(value)
+					widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
+												self.update_slider_value(v, label, min_v, max_v, whole))
+					widget.valueChanged.connect(self.set_unsaved_changes)
+					return widget, value_label
+				except ValueError:
+					pass
+		widget = QLineEdit(value)
+		widget.textChanged.connect(self.set_unsaved_changes)
+		return widget
 
 	def update_slider_value(self, value, label, min_val, max_val, whole_number):
 		if whole_number:
@@ -387,34 +478,45 @@ class OptionsEditor(QMainWindow):
 			for setting in data["settings"]:
 				widget_key = f"{section}_{setting['name']}"
 				if widget_key in self.widgets:
-					widget = self.widgets[widget_key]
-					widget.setEnabled(setting["editable"])
+					widget_data = self.widgets[widget_key]
+					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+					if "slider" in widget_data:
+						widget_data["slider"].setEnabled(is_editable)
+						widget_data["value_label"].setEnabled(is_editable)
+					else:
+						widget_data["widget"].setEnabled(is_editable)
+	def set_unsaved_changes(self):
+		self.unsaved_changes = True
 
 	def save_options(self):
-		self.log("Starting save_options method")
+		self.log(f"Starting save_options method for {self.game}")
 		if not self.file_path or not self.game_agnostic_file_path:
-			QMessageBox.critical(self, "Error", "One or both files are not loaded")
+			self.show_error_message("Error", "One or both files are not loaded")
 			return
 		try:
 			self.save_file_with_permissions(self.file_path, "GameSpecific")
 			self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
-			if self.read_only_action.isChecked():
-				os.chmod(self.file_path, stat.S_IREAD)
-				os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
-				self.read_only = True
-			else:
-				os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
-				os.chmod(self.game_agnostic_file_path, stat.S_IWRITE | stat.S_IREAD)
-				self.read_only = False
+			self.update_file_permissions()
 			self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
-			QMessageBox.information(self, "Success", "Options saved successfully")
+			QMessageBox.information(self, "Success", f"Options for {self.game} saved successfully")
+			self.unsaved_changes = False
 			self.reload_file()
 		except Exception as e:
-			error_msg = f"Failed to save options: {str(e)}\n"
+			error_msg = f"Failed to save options for {self.game}: {str(e)}\n"
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
-			QMessageBox.critical(self, "Error", error_msg)
+			self.show_error_message("Error", error_msg)
 			self.log(error_msg)
+
+	def update_file_permissions(self):
+		if self.read_only_action.isChecked():
+			os.chmod(self.file_path, stat.S_IREAD)
+			os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
+			self.read_only = True
+		else:
+			os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
+			os.chmod(self.game_agnostic_file_path, stat.S_IWRITE | stat.S_IREAD)
+			self.read_only = False
 
 	def save_file_with_permissions(self, file_path, file_type):
 		original_permissions = os.stat(file_path).st_mode
@@ -436,45 +538,12 @@ class OptionsEditor(QMainWindow):
 							if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
 								widget_key = f"{section}_{setting['name']}"
 								if widget_key in self.widgets:
-									widget = self.widgets[widget_key]
-									if isinstance(widget, QCheckBox):
-										value = str(widget.isChecked()).lower()
-									elif isinstance(widget, QSlider):
-										is_whole_number = '.' not in setting['comment']
-										if is_whole_number:
-											value = str(widget.value())
-										else:
-											value = f"{widget.value() / 1000:.6f}"
-									elif isinstance(widget, QComboBox):
-										value = widget.currentText()
-									elif isinstance(widget, QLineEdit):
-										value = widget.text()
-										if '.' not in setting['comment'] and value.replace('.', '').isdigit():
-											value = str(int(float(value)))
+									widget_data = self.widgets[widget_key]
+									value = self.get_widget_value(widget_data)
+									if self.is_value_in_range(setting, value):
+										lines[i] = self.format_line(file_type, line, setting, value)
 									else:
-										continue
-									if "to" in setting['comment']:
-										numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
-										if len(numbers) >= 2:
-											try:
-												min_val, max_val = float(numbers[0]), float(numbers[1])
-												float_value = float(value)
-												if float_value < min_val or float_value > max_val:
-													user_choice = QMessageBox.warning(
-														self,
-														"Value out of range",
-														f"The value {value} for {setting['name']} is outside the recommended range ({min_val} to {max_val}). Do you want to proceed?",
-														QMessageBox.Yes | QMessageBox.No,
-														QMessageBox.No
-													)
-													if user_choice == QMessageBox.No:
-														continue
-											except ValueError:
-												pass
-									if file_type == "GameSpecific":
-										lines[i] = f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-									else:  # GameAgnostic
-										lines[i] = f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+										self.log(f"Value {value} for {setting['name']} is out of range. Skipping.")
 			with open(file_path, 'w') as file:
 				file.writelines(lines)
 		except Exception as e:
@@ -482,12 +551,60 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
 			raise Exception(error_msg)
+	def get_widget_value(self, widget_data):
+		if "slider" in widget_data:
+			return widget_data["value_label"].text()
+		elif isinstance(widget_data["widget"], QCheckBox):
+			return str(widget_data["widget"].isChecked()).lower()
+		elif isinstance(widget_data["widget"], QComboBox):
+			return widget_data["widget"].currentText()
+		elif isinstance(widget_data["widget"], QLineEdit):
+			return widget_data["widget"].text()
+		return ""
+
+	def is_value_in_range(self, setting, value):
+		if "to" in setting['comment']:
+			numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
+			if len(numbers) >= 2:
+				try:
+					min_val, max_val = float(numbers[0]), float(numbers[1])
+					float_value = float(value)
+					return min_val <= float_value <= max_val
+				except ValueError:
+					pass
+		return True
+
+	def format_line(self, file_type, line, setting, value):
+		if file_type == "GameSpecific":
+			return f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+		else:  # GameAgnostic
+			return f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 
 	def reload_file(self):
 		if self.file_path and self.game_agnostic_file_path:
 			self.parse_options_file()
 			self.display_options()
-			self.log("Files reloaded")
+			self.unsaved_changes = False
+			self.log(f"Files reloaded for {self.game}")
+
+	def check_unsaved_changes(self):
+		if self.unsaved_changes:
+			reply = QMessageBox.question(self, 'Unsaved Changes',
+										 "You have unsaved changes. Do you want to save them?",
+										 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+										 QMessageBox.Save)
+			if reply == QMessageBox.Save:
+				self.save_options()
+				return True
+			elif reply == QMessageBox.Cancel:
+				return False
+		return True
+
+	def closeEvent(self, event):
+		if self.check_unsaved_changes():
+			event.accept()
+		else:
+			event.ignore()
 
 def main():
 	app = QApplication(sys.argv)
