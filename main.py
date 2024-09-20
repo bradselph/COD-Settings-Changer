@@ -133,7 +133,7 @@ class OptionsEditor(QMainWindow):
 		file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
 		file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
 		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
-		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))  # New menu item
+		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))
 		file_menu.addSeparator()
 		file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
