@@ -21,15 +21,20 @@ class GameSelector(QDialog):
 		label = QLabel("Choose the game you want to modify settings for:")
 		layout.addWidget(label)
 
-		mw2_button = QPushButton("MW2/Warzone 2023")
-		mw2_button.setEnabled(False)
-		layout.addWidget(mw2_button)
+		self.mw2_button = QPushButton("MW2/Warzone 2023")
+		self.mw2_button.clicked.connect(lambda: self.select_game("MW2/Warzone 2023"))
+		layout.addWidget(self.mw2_button)
 
-		mw3_button = QPushButton("MW3/Warzone 2024")
-		mw3_button.clicked.connect(self.accept)
-		layout.addWidget(mw3_button)
+		self.mw3_button = QPushButton("MW3/Warzone 2024")
+		self.mw3_button.clicked.connect(lambda: self.select_game("MW3/Warzone 2024"))
+		layout.addWidget(self.mw3_button)
 
+		self.selected_game = None
 		self.setLayout(layout)
+
+	def select_game(self, game):
+		self.selected_game = game
+		self.accept()
 
 class LogWindow(QDockWidget):
 	def __init__(self, parent=None):
@@ -153,7 +158,7 @@ class OptionsEditor(QMainWindow):
 		try:
 			dialog = GameSelector(self)
 			if dialog.exec_():
-				self.game = "MW3/Warzone 2024"
+				self.game = dialog.selected_game
 				self.selected_game = self.game
 				self.log(f"Selected game: {self.game}")
 				self.load_file(auto=True)
@@ -188,7 +193,7 @@ class OptionsEditor(QMainWindow):
 			self.log("Starting load_file method")
 			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
 			file_names = {
-					"game_specific": "options.4.cod23.cst",
+					"game_specific": "options.4.cod23.cst" if self.game == "MW3/Warzone 2024" else "options.3.cod22.cst",
 					"game_agnostic": "gamerprofile.0.BASE.cst"
 			}
 
@@ -390,7 +395,7 @@ class OptionsEditor(QMainWindow):
 		self.unsaved_changes = True
 
 	def save_options(self):
-		self.log("Starting save_options method")
+		self.log(f"Starting save_options method for {self.game}")
 		if not self.file_path or not self.game_agnostic_file_path:
 			self.show_error_message("Error", "One or both files are not loaded")
 			return
@@ -399,11 +404,11 @@ class OptionsEditor(QMainWindow):
 			self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
 			self.update_file_permissions()
 			self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
-			QMessageBox.information(self, "Success", "Options saved successfully")
+			QMessageBox.information(self, "Success", f"Options for {self.game} saved successfully")
 			self.unsaved_changes = False
 			self.reload_file()
 		except Exception as e:
-			error_msg = f"Failed to save options: {str(e)}\n"
+			error_msg = f"Failed to save options for {self.game}: {str(e)}\n"
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
 			self.show_error_message("Error", error_msg)
@@ -487,7 +492,7 @@ class OptionsEditor(QMainWindow):
 			self.parse_options_file()
 			self.display_options()
 			self.unsaved_changes = False
-			self.log("Files reloaded")
+			self.log(f"Files reloaded for {self.game}")
 
 	def check_unsaved_changes(self):
 		if self.unsaved_changes:
