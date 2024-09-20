@@ -91,6 +91,7 @@ class OptionsEditor(QMainWindow):
 				"Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
 				"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
 		]
+		self.unsaved_changes = False
 
 		self.log_window = LogWindow(self)
 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
@@ -208,6 +209,7 @@ class OptionsEditor(QMainWindow):
 					self.show_read_only_message()
 				self.parse_options_file()
 				self.display_options()
+				self.unsaved_changes = False
 			else:
 				self.log("File selection cancelled")
 				self.close()
@@ -297,11 +299,11 @@ class OptionsEditor(QMainWindow):
 				scroll_layout.addWidget(comment, i, 3)
 				file_type_label = QLabel(f"({setting['file_type']})")
 				scroll_layout.addWidget(file_type_label, i, 4)
-			scroll_widget.setLayout(scroll_layout)
-			scroll_area.setWidget(scroll_widget)
-			scroll_area.setWidgetResizable(True)
-			self.tab_widget.addTab(scroll_area, section)
-		self.update_widget_states()
+				scroll_widget.setLayout(scroll_layout)
+				scroll_area.setWidget(scroll_widget)
+				scroll_area.setWidgetResizable(True)
+				self.tab_widget.addTab(scroll_area, section)
+				self.update_widget_states()
 
 	def create_widget(self, setting, value):
 		if setting['name'] in self.non_editable_fields:
@@ -312,21 +314,27 @@ class OptionsEditor(QMainWindow):
 			options = self.get_options_for_combobox(setting)
 			widget.addItems(options)
 			widget.setCurrentText(value)
+			widget.currentTextChanged.connect(self.set_unsaved_changes)
 		elif value.lower() in ('true', 'false'):
 			widget = QCheckBox()
 			widget.setChecked(value.lower() == 'true')
+			widget.stateChanged.connect(self.set_unsaved_changes)
 		elif re.match(r'^-?\d+(\.\d+)?$', value):
 			widget = self.create_slider_widget(setting, value)
+			widget.valueChanged.connect(self.set_unsaved_changes)
 		elif "one of" in setting['comment']:
 			widget = NoScrollComboBox()
 			options = re.findall(r'\[(.*?)\]', setting['comment'])
 			if options:
 				widget.addItems(options[0].split(', '))
 				widget.setCurrentText(value)
+				widget.currentTextChanged.connect(self.set_unsaved_changes)
 			else:
 				widget = QLineEdit(value)
+				widget.textChanged.connect(self.set_unsaved_changes)
 		else:
 			widget = QLineEdit(value)
+			widget.textChanged.connect(self.set_unsaved_changes)
 		return widget
 
 	def get_options_for_combobox(self, setting):
@@ -357,7 +365,7 @@ class OptionsEditor(QMainWindow):
 						widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
 						value_label = QLabel(value)
 						widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
-						self.update_slider_value(v, label, min_v, max_v, whole))
+													self.update_slider_value(v, label, min_v, max_v, whole))
 					return widget
 				except ValueError:
 					pass
@@ -378,6 +386,9 @@ class OptionsEditor(QMainWindow):
 					widget = self.widgets[widget_key]
 					widget.setEnabled(setting["editable"])
 
+	def set_unsaved_changes(self):
+		self.unsaved_changes = True
+
 	def save_options(self):
 		self.log("Starting save_options method")
 		if not self.file_path or not self.game_agnostic_file_path:
@@ -389,6 +400,7 @@ class OptionsEditor(QMainWindow):
 			self.update_file_permissions()
 			self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
 			QMessageBox.information(self, "Success", "Options saved successfully")
+			self.unsaved_changes = False
 			self.reload_file()
 		except Exception as e:
 			error_msg = f"Failed to save options: {str(e)}\n"
@@ -474,7 +486,27 @@ class OptionsEditor(QMainWindow):
 		if self.file_path and self.game_agnostic_file_path:
 			self.parse_options_file()
 			self.display_options()
+			self.unsaved_changes = False
 			self.log("Files reloaded")
+
+	def check_unsaved_changes(self):
+		if self.unsaved_changes:
+			reply = QMessageBox.question(self, 'Unsaved Changes',
+										 "You have unsaved changes. Do you want to save them?",
+										 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+										 QMessageBox.Save)
+			if reply == QMessageBox.Save:
+				self.save_options()
+				return True
+			elif reply == QMessageBox.Cancel:
+				return False
+		return True
+
+	def closeEvent(self, event):
+		if self.check_unsaved_changes():
+			event.accept()
+		else:
+			event.ignore()
 
 def main():
 	app = QApplication(sys.argv)
