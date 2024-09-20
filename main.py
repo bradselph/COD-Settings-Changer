@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
@@ -56,10 +57,12 @@ class LogWindow(QDockWidget):
 			with open(file_name, 'w') as f:
 				f.write(self.text_edit.toPlainText())
 			self.log(f"Log saved to {file_name}")
+
 	def closeEvent(self, event):
 		if isinstance(self.parent(), OptionsEditor):
 			self.parent().show_log_action.setChecked(False)
-			super().closeEvent(event)
+			self.parent().log_window_detached = self.isFloating()
+		super().closeEvent(event)
 
 class NoScrollSlider(QSlider):
 	def wheelEvent(self, event):
@@ -87,6 +90,7 @@ class OptionsEditor(QMainWindow):
 		self.log_window = LogWindow(self)
 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
 		self.log_window.show()
+
 		self.log_window_detached = False
 		self.log_window.topLevelChanged.connect(self.on_log_window_detached)
 
@@ -248,6 +252,7 @@ class OptionsEditor(QMainWindow):
 					self.log_window_detached = False
 				self.log_window.show()
 			elif self.log_window_detached:
+				self.log_window.setFloating(False)
 				self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
 				self.log_window_detached = False
 		else:
@@ -264,13 +269,23 @@ class OptionsEditor(QMainWindow):
 
 				if not os.path.exists(self.file_path):
 					self.log(f"File not found: {self.file_path}")
-					QMessageBox.warning(self, "File Not Found", f"Could not find {file_name}. Please select it manually.")
+					msg_box = QMessageBox(QMessageBox.Warning, "File Not Found", f"Could not find {file_name}. Please select it manually.")
+					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+					msg_box.show()
+					msg_box.activateWindow()
+					msg_box.raise_()
+					msg_box.exec_()
 					self.file_path = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
 																 "CST Files (*.cst);;All Files (*)")[0]
 
 				if not os.path.exists(self.game_agnostic_file_path):
 					self.log(f"File not found: {self.game_agnostic_file_path}")
-					QMessageBox.warning(self, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
+					msg_box = QMessageBox(QMessageBox.Warning, "File Not Found", f"Could not find gamerprofile.0.BASE.cst. Please select it manually.")
+					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+					msg_box.show()
+					msg_box.activateWindow()
+					msg_box.raise_()
+					msg_box.exec_()
 					self.game_agnostic_file_path = QFileDialog.getOpenFileName(self, "Select gamerprofile.0.BASE.cst", default_path,
 																			   "CST Files (*.cst);;All Files (*)")[0]
 			else:
@@ -284,8 +299,13 @@ class OptionsEditor(QMainWindow):
 				self.log(f"Loading files: {self.file_path} and {self.game_agnostic_file_path}")
 				self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
 				if self.read_only:
-					QMessageBox.information(self, "Read-only File",
-											"One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
+					msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
+										  "One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
+					msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+					msg_box.show()
+					msg_box.activateWindow()
+					msg_box.raise_()
+					msg_box.exec_()
 				self.parse_options_file()
 				self.display_options()
 			else:
@@ -293,7 +313,12 @@ class OptionsEditor(QMainWindow):
 				self.close()
 		except Exception as e:
 			self.log(f"Error in load_file: {str(e)}")
-			QMessageBox.critical(self, "File Loading Error", f"An error occurred while loading files: {str(e)}")
+			msg_box = QMessageBox(QMessageBox.Critical, "File Loading Error", f"An error occurred while loading files: {str(e)}")
+			msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+			msg_box.show()
+			msg_box.activateWindow()
+			msg_box.raise_()
+			msg_box.exec_()
 
 	def parse_options_file(self):
 		self.options.clear()
