@@ -476,19 +476,9 @@ class OptionsEditor(QMainWindow):
 		if not self.file_path or not self.game_agnostic_file_path:
 			QMessageBox.critical(self, "Error", "One or both files are not loaded")
 			return
-		if self.read_only:
-			new_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Specific File As", os.path.dirname(self.file_path),
-													   "CST Files (*.cst);;All Files (*)")
-			new_game_agnostic_file_path, _ = QFileDialog.getSaveFileName(self, "Save Game-Agnostic File As", os.path.dirname(self.game_agnostic_file_path),
-																	 "CST Files (*.cst);;All Files (*)")
-			if not new_file_path or not new_game_agnostic_file_path:
-				return
-			self.file_path = new_file_path
-			self.game_agnostic_file_path = new_game_agnostic_file_path
-			self.read_only = False
 		try:
-			self.save_file(self.file_path, "GameSpecific")
-			self.save_file(self.game_agnostic_file_path, "GameAgnostic")
+			self.save_file_with_permissions(self.file_path, "GameSpecific")
+			self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
 			if self.read_only_action.isChecked():
 				os.chmod(self.file_path, stat.S_IREAD)
 				os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
@@ -506,6 +496,14 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error args: {e.args}\n"
 			QMessageBox.critical(self, "Error", error_msg)
 			self.log(error_msg)
+
+	def save_file_with_permissions(self, file_path, file_type):
+		original_permissions = os.stat(file_path).st_mode
+		try:
+			os.chmod(file_path, stat.S_IWRITE | stat.S_IREAD)
+			self.save_file(file_path, file_type)
+		finally:
+			os.chmod(file_path, original_permissions)
 
 	def save_file(self, file_path, file_type):
 		try:
