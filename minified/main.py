@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QPushBu
 from PyQt5.QtCore import Qt,QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
+from PyQt5.QtGui import QIcon
 import sys,os,re,stat
 class GameSelector(QDialog):
 	def __init__(A,parent=_I):C='MW2/Warzone 2023';super().__init__(parent);A.setWindowTitle('Select Game');A.setFixedSize(300,150);B=QVBoxLayout();D=QLabel('Choose the game you want to modify settings for:');B.addWidget(D);A.mw2_button=QPushButton(C);A.mw2_button.clicked.connect(lambda:A.select_game(C));B.addWidget(A.mw2_button);A.mw3_button=QPushButton(_M);A.mw3_button.clicked.connect(lambda:A.select_game(_M));B.addWidget(A.mw3_button);A.selected_game=_I;A.setLayout(B);A.setup_window_flags()
@@ -49,7 +50,11 @@ class NoScrollSlider(QSlider):
 class NoScrollComboBox(QComboBox):
 	def wheelEvent(A,event):event.ignore()
 class OptionsEditor(QMainWindow):
-	def __init__(A):super().__init__();A.setWindowTitle('Call of Duty Options Editor');A.setGeometry(100,100,1000,600);A.options={};A.widgets={};A.file_path='';A.game_agnostic_file_path='';A.read_only=_B;A.game='';A.selected_game='';A.non_editable_fields=['SoundOutputDevice','SoundInputDevice','VoiceOutputDevice','VoiceInputDevice','Monitor','GPUName','DetectedFrequencyGHz','DetectedMemoryAmountMB','LastUsedGPU','GPUDriverVersion','DisplayDriverVersion','DisplayDriverVersionRecommended','ESSDI'];A.unsaved_changes=_B;A.log_window=LogWindow(A);A.addDockWidget(Qt.BottomDockWidgetArea,A.log_window);A.log_window.hide();A.log_window_detached=_B;A.log_window.topLevelChanged.connect(A.on_log_window_detached);A.create_menu();A.create_widgets();A.help_texts=get_help_texts();A.setStyleSheet('\n\t\t\tQToolTip {\n\t\t\t\tbackground-color: #2a82da;\n\t\t\t\tcolor: white;\n\t\t\t\tborder: 1px solid white;\n\t\t\t\tpadding: 5px;\n\t\t\t}\n\t\t');A.select_game()
+	def __init__(A):
+		super().__init__();A.setWindowTitle('Call of Duty Options Editor');A.setGeometry(100,100,1000,600)
+		if getattr(sys,'frozen',_B):B=sys._MEIPASS
+		else:B=os.path.dirname(os.path.abspath(__file__))
+		C=os.path.join(B,'gear_icon.ico');A.setWindowIcon(QIcon(C));A.options={};A.widgets={};A.file_path='';A.game_agnostic_file_path='';A.read_only=_B;A.game='';A.selected_game='';A.non_editable_fields=['SoundOutputDevice','SoundInputDevice','VoiceOutputDevice','VoiceInputDevice','Monitor','GPUName','DetectedFrequencyGHz','DetectedMemoryAmountMB','LastUsedGPU','GPUDriverVersion','DisplayDriverVersion','DisplayDriverVersionRecommended','ESSDI'];A.unsaved_changes=_B;A.log_window=LogWindow(A);A.addDockWidget(Qt.BottomDockWidgetArea,A.log_window);A.log_window.hide();A.log_window_detached=_B;A.log_window.topLevelChanged.connect(A.on_log_window_detached);A.create_menu();A.create_widgets();A.help_texts=get_help_texts();A.setStyleSheet('\n\t\t\tQToolTip {\n\t\t\t\tbackground-color: #2a82da;\n\t\t\t\tcolor: white;\n\t\t\t\tborder: 1px solid white;\n\t\t\t\tpadding: 5px;\n\t\t\t}\n\t\t');A.select_game()
 	def log(A,message):
 		B=message
 		if hasattr(A,'log_window'):A.log_window.log(B)
