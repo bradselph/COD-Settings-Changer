@@ -11,3 +11,4 @@ Mouse and Gamepad
 *.log
 __pycache__/help_texts.cpython-312.pyc
 /minified
+CallOfDutyOptionsEditor.exe
