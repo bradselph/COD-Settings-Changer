@@ -110,7 +110,7 @@ class OptionsEditor(QMainWindow):
 
 		self.log_window = LogWindow(self)
 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-		self.log_window.show()
+		self.log_window.hide()
 
 		self.log_window_detached = False
 		self.log_window.topLevelChanged.connect(self.on_log_window_detached)
@@ -205,6 +205,22 @@ class OptionsEditor(QMainWindow):
 		else:
 			self.log_window.close()
 
+	def show_log_window(self):
+		if not self.log_window.isVisible():
+			if self.log_window_detached:
+				self.log_window = LogWindow(self)
+				self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+				self.log_window.topLevelChanged.connect(self.on_log_window_detached)
+				self.log_window_detached = False
+			self.log_window.show()
+		elif self.log_window_detached:
+			self.log_window.setFloating(False)
+			self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+			self.log_window_detached = False
+
+	def hide_log_window(self):
+		self.log_window.close()
+
 	def load_file(self, auto=False):
 		try:
 			self.log("Starting load_file method")
@@ -214,17 +230,22 @@ class OptionsEditor(QMainWindow):
 					"game_agnostic": "gamerprofile.0.BASE.cst"
 			}
 
+			files_to_load = {}
 			for file_type, file_name in file_names.items():
 				file_path = os.path.join(default_path, file_name)
 				if not auto or not os.path.exists(file_path):
 					file_path = self.get_file_path(file_type, file_name, default_path)
 
-				if file_type == "game_specific":
-					self.file_path = file_path
+				if file_path:
+					files_to_load[file_type] = file_path
 				else:
-					self.game_agnostic_file_path = file_path
+					self.log(f"File selection cancelled for {file_type}")
+					return  # Exit the method if user cancels any file selection
 
-			if self.file_path and self.game_agnostic_file_path:
+			if len(files_to_load) == 2:  # Both files were selected
+				self.file_path = files_to_load["game_specific"]
+				self.game_agnostic_file_path = files_to_load["game_agnostic"]
+
 				self.log(f"Loading files: {self.file_path} and {self.game_agnostic_file_path}")
 				self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
 				if self.read_only:
@@ -233,22 +254,40 @@ class OptionsEditor(QMainWindow):
 				self.display_options()
 				self.unsaved_changes = False
 			else:
-				self.log("File selection cancelled")
-				self.close()
+				self.log("File selection incomplete")
+				self.show_error_message("File Selection", "Both files are required to proceed. Please select both files.")
 		except Exception as e:
 			self.log(f"Error in load_file: {str(e)}")
 			self.show_error_message("File Loading Error", f"An error occurred while loading files: {str(e)}")
 
 	def get_file_path(self, file_type, file_name, default_path):
-		self.log(f"File not found: {file_name}")
-		msg_box = QMessageBox(QMessageBox.Warning, "File Not Found", f"Could not find {file_name}. Please select it manually.")
+		message = (f"Please select the {file_type} file:\n"
+				   f"{file_name}\n\n"
+				   f"This file is typically located in:\n"
+				   f"{default_path}")
+
+		msg_box = QMessageBox(QMessageBox.Information, "Select File", message)
+		msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+		msg_box.setDefaultButton(QMessageBox.Ok)
 		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
-		msg_box.exec_()
-		return QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path, "CST Files (*.cst);;All Files (*)")[0]
+
+		result = msg_box.exec_()
+		if result == QMessageBox.Ok:
+			file_path, _ = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path, "CST Files (*.cst);;All Files (*)")
+			if file_path:
+				return file_path
+			else:
+				self.log(f"No file selected for {file_type}")
+				return None
+		else:
+			self.log(f"File selection cancelled for {file_type}")
+			return None
 
 	def show_read_only_message(self):
 		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
-							  "One or both of the selected files are read-only. You can make changes, but you'll need to save them as new files or remove the read-only attribute.")
+							  "One or both of the selected files are read-only. "
+							  "You can make changes, but you'll need to save them as new files "
+							  "or remove the read-only attribute.")
 		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
 		msg_box.exec_()
 
@@ -317,10 +356,18 @@ class OptionsEditor(QMainWindow):
 					slider_layout.addWidget(slider)
 					slider_layout.addWidget(value_label)
 					scroll_layout.addLayout(slider_layout, i, 1)
+					self.widgets[f"{section}_{setting['name']}"] = {"slider": slider, "value_label": value_label}
 				else:
 					scroll_layout.addWidget(widget, i, 1)
-				widget.setEnabled(setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields)
-				self.widgets[f"{section}_{setting['name']}"] = widget
+					self.widgets[f"{section}_{setting['name']}"] = {"widget": widget}
+
+				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+				if isinstance(widget, tuple):
+					slider.setEnabled(is_editable)
+					value_label.setEnabled(is_editable)
+				else:
+					widget.setEnabled(is_editable)
+
 				tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
 				tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
 				if isinstance(widget, tuple):
@@ -422,12 +469,13 @@ class OptionsEditor(QMainWindow):
 			for setting in data["settings"]:
 				widget_key = f"{section}_{setting['name']}"
 				if widget_key in self.widgets:
-					widget = self.widgets[widget_key]
-					if isinstance(widget, tuple):
-						widget[0].setEnabled(setting["editable"])
+					widget_data = self.widgets[widget_key]
+					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+					if "slider" in widget_data:
+						widget_data["slider"].setEnabled(is_editable)
+						widget_data["value_label"].setEnabled(is_editable)
 					else:
-						widget.setEnabled(setting["editable"])
-
+						widget_data["widget"].setEnabled(is_editable)
 	def set_unsaved_changes(self):
 		self.unsaved_changes = True
 
@@ -481,8 +529,8 @@ class OptionsEditor(QMainWindow):
 							if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
 								widget_key = f"{section}_{setting['name']}"
 								if widget_key in self.widgets:
-									widget = self.widgets[widget_key]
-									value = self.get_widget_value(widget)
+									widget_data = self.widgets[widget_key]
+									value = self.get_widget_value(widget_data)
 									if self.is_value_in_range(setting, value):
 										lines[i] = self.format_line(file_type, line, setting, value)
 									else:
@@ -494,18 +542,15 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
 			raise Exception(error_msg)
-
-	def get_widget_value(self, widget):
-		if isinstance(widget, tuple):  # For sliders with value labels
-			return widget[1].text()
-		elif isinstance(widget, QCheckBox):
-			return str(widget.isChecked()).lower()
-		elif isinstance(widget, QSlider):
-			return str(widget.value() / 1000) if widget.maximum() > 1000 else str(widget.value())
-		elif isinstance(widget, QComboBox):
-			return widget.currentText()
-		elif isinstance(widget, QLineEdit):
-			return widget.text()
+	def get_widget_value(self, widget_data):
+		if "slider" in widget_data:
+			return widget_data["value_label"].text()
+		elif isinstance(widget_data["widget"], QCheckBox):
+			return str(widget_data["widget"].isChecked()).lower()
+		elif isinstance(widget_data["widget"], QComboBox):
+			return widget_data["widget"].currentText()
+		elif isinstance(widget_data["widget"], QLineEdit):
+			return widget_data["widget"].text()
 		return ""
 
 	def is_value_in_range(self, setting, value):
