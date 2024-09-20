@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
+from PyQt5.QtGui import QIcon
+
 import sys
 import os
 import re
@@ -93,6 +95,13 @@ class OptionsEditor(QMainWindow):
 		super().__init__()
 		self.setWindowTitle("Call of Duty Options Editor")
 		self.setGeometry(100, 100, 1000, 600)
+		if getattr(sys, 'frozen', False):
+			application_path = sys._MEIPASS
+		else:
+			application_path = os.path.dirname(os.path.abspath(__file__))
+		icon_path = os.path.join(application_path, 'gear_icon.ico')
+		self.setWindowIcon(QIcon(icon_path))
+
 
 		self.options = {}
 		self.widgets = {}
