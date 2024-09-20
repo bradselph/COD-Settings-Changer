@@ -133,6 +133,7 @@ class OptionsEditor(QMainWindow):
 		file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
 		file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
 		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
+		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))  # New menu item
 		file_menu.addSeparator()
 		file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
@@ -168,6 +169,12 @@ class OptionsEditor(QMainWindow):
 		except Exception as e:
 			self.log(f"Error in select_game: {str(e)}")
 			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
+
+	def change_game(self):
+		if self.check_unsaved_changes():
+			self.select_game()
+			self.load_file(auto=True)
+			self.log(f"Changed game to: {self.game}")
 
 	def on_log_window_detached(self, floating):
 		self.log_window_detached = floating
@@ -326,7 +333,10 @@ class OptionsEditor(QMainWindow):
 			widget.stateChanged.connect(self.set_unsaved_changes)
 		elif re.match(r'^-?\d+(\.\d+)?$', value):
 			widget = self.create_slider_widget(setting, value)
-			widget.valueChanged.connect(self.set_unsaved_changes)
+			if isinstance(widget, QSlider):
+				widget.valueChanged.connect(self.set_unsaved_changes)
+			else:
+				widget.textChanged.connect(self.set_unsaved_changes)
 		elif "one of" in setting['comment']:
 			widget = NoScrollComboBox()
 			options = re.findall(r'\[(.*?)\]', setting['comment'])
