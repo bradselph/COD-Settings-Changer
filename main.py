@@ -32,6 +32,16 @@ class GameSelector(QDialog):
 		self.selected_game = None
 		self.setLayout(layout)
 
+		self.setup_window_flags()
+
+	def setup_window_flags(self):
+		self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
+
+	def showEvent(self, event):
+		super().showEvent(event)
+		self.raise_()
+		self.activateWindow()
+
 	def select_game(self, game):
 		self.selected_game = game
 		self.accept()
