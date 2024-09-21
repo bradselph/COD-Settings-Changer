@@ -17,7 +17,7 @@ class GameSelector(QDialog):
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setWindowTitle("Select Game")
-		self.setFixedSize(300, 150)
+		self.setFixedSize(300, 200)
 
 		layout = QVBoxLayout()
 		label = QLabel("Choose the game you want to modify settings for:")
@@ -30,6 +30,11 @@ class GameSelector(QDialog):
 		self.mw3_button = QPushButton("MW3/Warzone 2024")
 		self.mw3_button.clicked.connect(lambda: self.select_game("MW3/Warzone 2024"))
 		layout.addWidget(self.mw3_button)
+
+		self.bo6_button = QPushButton("BO6")
+		self.bo6_button.clicked.connect(lambda: self.select_game("BO6"))
+		self.bo6_button.setEnabled(False)
+		layout.addWidget(self.bo6_button)
 
 		self.selected_game = None
 		self.setLayout(layout)
@@ -235,8 +240,8 @@ class OptionsEditor(QMainWindow):
 			self.log("Starting load_file method")
 			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
 			file_names = {
-					"game_specific": "options.4.cod23.cst" if self.game == "MW3/Warzone 2024" else "options.3.cod22.cst",
-					"game_agnostic": "gamerprofile.0.BASE.cst"
+					"game_specific": "s.1.0.cod24.txt" if self.game == "BO6" else ("options.4.cod23.cst" if self.game == "MW3/Warzone 2024" else "options.3.cod22.cst"),
+					"game_agnostic": "gamerprofile.pc.0.BASE.cst" if self.game == "BO6" else "gamerprofile.0.BASE.cst"
 			}
 
 			files_to_load = {}
@@ -282,7 +287,8 @@ class OptionsEditor(QMainWindow):
 
 		result = msg_box.exec_()
 		if result == QMessageBox.Ok:
-			file_path, _ = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path, "CST Files (*.cst);;All Files (*)")
+			file_path, _ = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
+													   "CST Files (*.cst);;TXT Files (*.txt);;All Files (*)")
 			if file_path:
 				return file_path
 			else:
@@ -316,8 +322,12 @@ class OptionsEditor(QMainWindow):
 			with open(file_path, 'r') as file:
 				content = file.read()
 				if file_type == "GameSpecific":
-					sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
-					section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
+					if self.game == "BO6":
+						sections = re.split(r'//\n// [A-Za-z ]+\n//', content)[1:]
+						section_names = re.findall(r'//\n// ([A-Za-z ]+)\n//', content)
+					else:
+						sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
+						section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
 				else:  # GameAgnostic
 					sections = [content]
 					section_names = ["GameAgnostic"]
@@ -328,7 +338,13 @@ class OptionsEditor(QMainWindow):
 					for line in lines:
 						if '=' in line and not line.strip().startswith('//'):
 							key, value = line.split('=', 1)
-							key = key.split(':')[0].strip() if file_type == "GameSpecific" else key.split('@')[0].strip()
+							if file_type == "GameSpecific":
+								if self.game == "BO6":
+									key = key.split('@')[0].strip()
+								else:
+									key = key.split(':')[0].strip()
+							else:
+								key = key.split('@')[0].strip()
 							value = value.strip().strip('"')
 							comment = ""
 							if '//' in value:
@@ -336,10 +352,10 @@ class OptionsEditor(QMainWindow):
 								value = value.strip()
 								comment = comment.strip()
 							self.options[name]["settings"].append({
-									"name": key,
-									"value": value,
-									"comment": comment,
-									"editable": not line.strip().startswith("// DO NOT MODIFY"),
+									"name":      key,
+									"value":     value,
+									"comment":   comment,
+									"editable":  not line.strip().startswith("// DO NOT MODIFY"),
 									"file_type": file_type
 							})
 			self.log(f"Loaded {sum(len(section['settings']) for section in self.options.values())} options from {file_path}")
@@ -370,7 +386,8 @@ class OptionsEditor(QMainWindow):
 					scroll_layout.addWidget(widget, i, 1)
 					self.widgets[f"{section}_{setting['name']}"] = {"widget": widget}
 
-				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
+					'name'] not in self.non_editable_fields
 				if isinstance(widget, tuple):
 					slider.setEnabled(is_editable)
 					value_label.setEnabled(is_editable)
@@ -454,7 +471,8 @@ class OptionsEditor(QMainWindow):
 						widget.setRange(int(min_val * 1000), int(max_val * 1000))
 						widget.setValue(int(float(value) * 1000))
 					widget.setTickPosition(QSlider.TicksBelow)
-					widget.setTickInterval((int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
+					widget.setTickInterval(
+						(int(max_val * 1000) - int(min_val * 1000)) // 10 if not is_whole_number else max(1, int((max_val - min_val) / 10)))
 					value_label = QLabel(value)
 					widget.valueChanged.connect(lambda v, label=value_label, min_v=min_val, max_v=max_val, whole=is_whole_number:
 												self.update_slider_value(v, label, min_v, max_v, whole))
@@ -479,7 +497,8 @@ class OptionsEditor(QMainWindow):
 				widget_key = f"{section}_{setting['name']}"
 				if widget_key in self.widgets:
 					widget_data = self.widgets[widget_key]
-					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting['name'] not in self.non_editable_fields
+					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
+						'name'] not in self.non_editable_fields
 					if "slider" in widget_data:
 						widget_data["slider"].setEnabled(is_editable)
 						widget_data["value_label"].setEnabled(is_editable)
@@ -532,7 +551,14 @@ class OptionsEditor(QMainWindow):
 				lines = file.readlines()
 			for i, line in enumerate(lines):
 				if '=' in line and not line.strip().startswith('//'):
-					key = line.split('=', 1)[0].strip().split(':')[0] if file_type == "GameSpecific" else line.split('=', 1)[0].strip().split('@')[0]
+					key = line.split('=', 1)[0].strip()
+					if file_type == "GameSpecific":
+						if self.game == "BO6":
+							key = key.split('@')[0]
+						else:
+							key = key.split(':')[0]
+					else:
+						key = key.split('@')[0]
 					for section, data in self.options.items():
 						for setting in data["settings"]:
 							if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
@@ -576,7 +602,10 @@ class OptionsEditor(QMainWindow):
 
 	def format_line(self, file_type, line, setting, value):
 		if file_type == "GameSpecific":
-			return f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+			if self.game == "BO6":
+				return f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+			else:
+				return f"{line.split('=')[0]}= \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 		else:  # GameAgnostic
 			return f"{line.split('=')[0]}= {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 
