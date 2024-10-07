@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+from PyQt5.QtWidgets import (QSettings, QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
                              QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
                              QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy)
@@ -18,6 +18,11 @@ class GameSelector(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Select Game")
         self.setFixedSize(300, 200)
+
+        settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+        if not settings.value("app_launched", False, type=bool):
+            self.show_first_time_warning()
+            settings.setValue("app_launched", True)
 
         layout = QVBoxLayout()
         label = QLabel("Choose the game you want to modify settings for:")
@@ -224,19 +229,66 @@ class OptionsEditor(QMainWindow):
         file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
         view_menu = menu_bar.addMenu("View")
-        # self.show_log_action = QAction("Show Log", self, checkable=True)
         self.show_log_action.triggered.connect(self.toggle_log_window)
         view_menu.addAction(self.show_log_action)
 
         options_menu = menu_bar.addMenu("Options")
-        # self.read_only_action = QAction("Save as Read-only", self, checkable=True)
         options_menu.addAction(self.read_only_action)
+
+        help_menu = menu_bar.addMenu("Help")
+        help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
+        help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
+
+    def show_first_time_warning(self):
+        warning_text = """
+        WARNING: Advanced Application
+    
+        This is an advanced application for editing Call of Duty game settings. 
+        Caution should be taken when making changes, as incorrect modifications 
+        may affect your game performance or stability.
+    
+        It is recommended to backup your settings files before making any changes.
+    
+        Use this application at your own risk.
+        """
+
+        warning_dialog = QMessageBox(self)
+        warning_dialog.setWindowTitle("First-Time User Warning")
+        warning_dialog.setText(warning_text)
+        warning_dialog.setIcon(QMessageBox.Warning)
+        warning_dialog.setStandardButtons(QMessageBox.Ok)
+        warning_dialog.exec_()
+
+    def show_about_dialog(self):
+        about_text = """
+        Call of Duty Options Editor
+    
+        Version: 1.0
+    
+        This application Cost 0$ no money its FREE if you paid for this app you got scammed.
+        
+        This application is designed to edit options for Call of Duty games.
+    
+        DISCLAIMER: This application and its developer are not in any way, shape, or form 
+        tied to or related with Activision, the publisher of Call of Duty games.
+    
+    
+        Third-party software used:
+        - PyQt5 (GPL v3)
+        - Python (PSF License)
+    
+        """
+
+        about_dialog = QMessageBox(self)
+        about_dialog.setWindowTitle("About")
+        about_dialog.setText(about_text)
+        about_dialog.setIcon(QMessageBox.Information)
+        about_dialog.exec_()
 
     def create_widgets(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout()
-        # self.tab_widget = QTabWidget()
         layout.addWidget(self.tab_widget)
         central_widget.setLayout(layout)
 
