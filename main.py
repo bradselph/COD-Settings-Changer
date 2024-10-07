@@ -49,9 +49,27 @@ class GameSelector(QDialog):
 		self.raise_()
 		self.activateWindow()
 
-	def select_game(self, game):
+	def select_game(self):
 		self.selected_game = game
 		self.accept()
+		try:
+			dialog = GameSelector(self)
+			if dialog.exec_():
+				self.game = dialog.selected_game
+				self.selected_game = self.game
+				self.log(f"Selected game: {self.game}")
+				self.load_file(auto=True)
+				self.raise_()
+				self.activateWindow()  # brings the window back to the top after game selection
+			else:
+				self.log("Game selection cancelled")
+				self.close()
+		except Exception as e:
+			self.log(f"Error in select_game: {str(e)}")
+			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
+
+
+
 
 class LogWindow(QDockWidget):
 	def __init__(self, parent=None):
