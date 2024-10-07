@@ -23,6 +23,7 @@ def build_executable(main_script="main.py", app_name=None):
         "--clean",
         "--name", app_name,
         "--noconsole",
+        "--icon", "gear-icon.ico",
         main_script,
         "--add-data", "help_texts.py;."
     ]
