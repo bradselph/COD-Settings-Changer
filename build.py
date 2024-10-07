@@ -27,8 +27,8 @@ def build_executable(main_script="main.py", app_name=None):
         "--add-data", "help_texts.py;."
     ]
 
-    if os.path.exists("icon.ico"):
-        cmd.extend(["--icon", "icon.ico"])
+    if os.path.exists("gear-icon.ico"):
+        cmd.extend(["--icon", "gear-icon.ico"])
 
     try:
         subprocess.check_call(cmd)
