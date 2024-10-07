@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-from PyQt5.QtWidgets import (QSettings, QApplication, QMainWindow, QWidget, QVBoxLayout,
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
                              QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
                              QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy)
+from PyQt5.QtCore import QSettings
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
@@ -45,6 +46,26 @@ class GameSelector(QDialog):
         self.setLayout(layout)
 
         self.setup_window_flags()
+
+    def show_first_time_warning(self):
+        warning_text = """
+        WARNING: Advanced Application
+    
+        This is an advanced application for editing Call of Duty game settings. 
+        Caution should be taken when making changes, as incorrect modifications 
+        may affect your game performance or stability.
+    
+        It is recommended to backup your settings files before making any changes.
+    
+        Use this application at your own risk.
+        """
+
+        warning_dialog = QMessageBox(self)
+        warning_dialog.setWindowTitle("First-Time User Warning")
+        warning_dialog.setText(warning_text)
+        warning_dialog.setIcon(QMessageBox.Warning)
+        warning_dialog.setStandardButtons(QMessageBox.Ok)
+        warning_dialog.exec_()
 
     def setup_window_flags(self):
         self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
@@ -262,21 +283,21 @@ class OptionsEditor(QMainWindow):
     def show_about_dialog(self):
         about_text = """
         Call of Duty Options Editor
-    
+
         Version: 1.0
-    
-        This application Cost 0$ no money its FREE if you paid for this app you got scammed.
+
+        This application is FREE and costs $0. If you paid for this app, you got scammed.
         
         This application is designed to edit options for Call of Duty games.
-    
+
         DISCLAIMER: This application and its developer are not in any way, shape, or form 
         tied to or related with Activision, the publisher of Call of Duty games.
-    
-    
+
+
         Third-party software used:
         - PyQt5 (GPL v3)
         - Python (PSF License)
-    
+
         """
 
         about_dialog = QMessageBox(self)
@@ -700,13 +721,17 @@ class OptionsEditor(QMainWindow):
             error_msg += f"Error type: {type(e).__name__}\n"
             error_msg += f"Error args: {e.args}\n"
             raise Exception(error_msg)
+
     def get_widget_value(self, widget_data):
         if "slider" in widget_data:
             return widget_data["value_label"].text()
         elif isinstance(widget_data["widget"], QCheckBox):
             return str(widget_data["widget"].isChecked()).lower()
         elif isinstance(widget_data["widget"], QComboBox):
-            return widget_data["widget"].currentText()
+            value = widget_data["widget"].currentText()
+            if widget_data["widget"].objectName() == "TargetRefreshRate":
+                return value.split()[0]
+            return value
         elif isinstance(widget_data["widget"], QLineEdit):
             return widget_data["widget"].text()
         return ""
