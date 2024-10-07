@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy )
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
@@ -413,6 +413,8 @@ class OptionsEditor(QMainWindow):
 			scroll_area = QScrollArea()
 			scroll_widget = QWidget()
 			scroll_layout = QGridLayout()
+			scroll_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+			scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 			for i, setting in enumerate(data["settings"]):
 				label = QLabel(f"{setting['name']}:")
 				scroll_layout.addWidget(label, i, 0)
