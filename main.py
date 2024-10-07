@@ -67,6 +67,19 @@ class GameSelector(QDialog):
         warning_dialog.setStandardButtons(QMessageBox.Ok)
         warning_dialog.exec_()
 
+    def show_read_only_message(self):
+        message = (
+                "The settings files have been saved as read-only. This prevents the game from overwriting your settings.\n\n"
+                "If you encounter any problems or want to allow the game to modify these files again, you can undo this by:\n"
+                "1. Locating the changed files\n"
+                "2. Right-clicking on each file\n"
+                "3. Selecting 'Properties'\n"
+                "4. Unchecking the 'Read-only' attribute\n"
+                "5. Clicking 'Apply' and then 'OK'\n\n"
+                "This will allow the game to modify and overwrite these files again."
+        )
+        QMessageBox.information(self, "Read-only Settings", message)
+
     def setup_window_flags(self):
         self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
 
@@ -130,7 +143,11 @@ class OptionsEditor(QMainWindow):
         self.setGeometry(100, 100, 1000, 600)
         self.show_log_action = QAction("Show Log", self, checkable=True)
         self.read_only_action = QAction("Save as Read-only", self, checkable=True)
+        self.read_only_checkbox = QCheckBox("Save as Read-only")
+        self.read_only_checkbox.setToolTip("Check this to save the file as read-only and prevent the game from overwriting your settings.")
+        self.layout().addWidget(self.read_only_checkbox)
         self.tab_widget = QTabWidget()
+
         self.widget_mappings = {
                 "boolean": QCheckBox,
                 "numeric": NoScrollSlider,
@@ -659,7 +676,13 @@ class OptionsEditor(QMainWindow):
         try:
             self.save_file_with_permissions(self.file_path, "GameSpecific")
             self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
-            self.update_file_permissions()
+
+            # Set files as read-only if checkbox is checked
+            if self.read_only_checkbox.isChecked():
+                os.chmod(self.file_path, 0o444)  # Read-only for user, group, and others
+                os.chmod(self.game_agnostic_file_path, 0o444)
+                self.show_read_only_message()
+
             self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
             QMessageBox.information(self, "Success", f"Options for {self.game} saved successfully")
             self.unsaved_changes = False
