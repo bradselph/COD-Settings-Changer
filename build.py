@@ -18,12 +18,13 @@ def build_executable(main_script="main.py", app_name=None):
     print(f"Building executable for {main_script}...")
 
     cmd = [
-            "pyinstaller",
-            "--onefile",
-            "--clean",
-            "--name", app_name,
-            main_script,
-            "--add-data", "help_texts.py;."
+        "pyinstaller",
+        "--onefile",
+        "--clean",
+        "--name", app_name,
+        "--noconsole",
+        main_script,
+        "--add-data", "help_texts.py;."
     ]
 
     if os.path.exists("icon.ico"):
