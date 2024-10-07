@@ -277,6 +277,11 @@ class OptionsEditor(QMainWindow):
         help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
         help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
 
+        options_menu = self.menuBar().addMenu("Options")
+        clear_settings_action = QAction("Clear All Settings", self)
+        clear_settings_action.triggered.connect(self.clear_all_settings)
+        options_menu.addAction(clear_settings_action)
+
     def show_first_time_warning(self):
         warning_text = """
         WARNING: Advanced Application
@@ -322,6 +327,34 @@ class OptionsEditor(QMainWindow):
         about_dialog.setText(about_text)
         about_dialog.setIcon(QMessageBox.Information)
         about_dialog.exec_()
+
+    def clear_all_settings(self):
+        reply = QMessageBox.question(self, 'Clear Settings',
+                                     "Are you sure you want to clear all settings? "
+                                     "This will reset the application to its initial state.",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+            settings.clear()
+            settings.sync()
+
+            QMessageBox.information(self, "Settings Cleared",
+                                    "All settings have been cleared. "
+                                    "The application will now close. "
+                                    "The next launch will be like a fresh install.")
+
+            self.close()
+
+    def closeEvent(self, event):
+        if self.check_unsaved_changes():
+            settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+            if not settings.contains("app_launched"):
+                event.accept()
+            else:
+                event.accept()
+        else:
+            event.ignore()
 
     def create_widgets(self):
         central_widget = QWidget()
