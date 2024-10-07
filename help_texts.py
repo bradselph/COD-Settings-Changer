@@ -1,5 +1,5 @@
 def get_help_texts():
-	return {
+	help_texts = {
 		"VideoMemoryScale": "Set a target fraction of your PC's video memory to be used by the game. Higher values may improve texture quality but could cause instability.",
 		"RendererWorkerCount": "Sets the number of CPU threads for handling rendering tasks. Higher values may improve performance on multi-core CPUs.",
 		"VoicePushToTalk": "When enabled, you need to press a key to activate your microphone in voice chat.",
@@ -189,6 +189,30 @@ def get_help_texts():
 		"MouseFlightVerticalSensibility": "Multiplies mouse sensitivity while in an air vehicle on the vertical axis only.",
 		"HTTPStreamLimitMBytes": "Sets the stream limit in megabytes.",
 		"HTTPStreamUsageLimit": "Enables or disables the stream usage limit.",
-		"ADSTimingSensitivityTouch": "Adjusts the timing for ADS sensitivity multipliers to take effect when aiming down sight for touch controls."
+		"ADSTimingSensitivityTouch": "Adjusts the timing for ADS sensitivity multipliers to take effect when aiming down sight for touch controls.",
+		"VoiceInputDevice": "Selects the input device used for voice chat.",
 	}
 
+	missing_help_text = []
+	empty_help_text = []
+
+	for key, value in help_texts.items():
+		if not value:
+			empty_help_text.append(key)
+		elif value.lower() == "no help text":
+			missing_help_text.append(key)
+
+	if missing_help_text:
+		print("The following keys have 'no help text':")
+		for key in missing_help_text:
+			print(f"  - {key}")
+
+	if empty_help_text:
+		print("\nThe following keys have empty help text:")
+		for key in empty_help_text:
+			print(f"  - {key}")
+
+	if not missing_help_text and not empty_help_text:
+		print("All keys have help text.")
+
+	return help_texts
