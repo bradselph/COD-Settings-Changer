@@ -72,6 +72,8 @@ class LogWindow(QDockWidget):
 		self.setWidget(content)
 
 	def log(self, message):
+		with open("application_log.txt", 'a') as log_file:
+			log_file.write(message + "\n")
 		self.text_edit.append(message)
 
 	def save_log(self):
@@ -100,14 +102,21 @@ class OptionsEditor(QMainWindow):
 		super().__init__()
 		self.setWindowTitle("Call of Duty Options Editor")
 		self.setGeometry(100, 100, 1000, 600)
+		self.show_log_action = QAction("Show Log", self, checkable=True)
+		self.read_only_action = QAction("Save as Read-only", self, checkable=True)
+		self.tab_widget = QTabWidget()
+		self.widget_mappings = {
+				"boolean": QCheckBox,
+				"numeric": NoScrollSlider,
+				"string": QLineEdit,
+				"dropdown": NoScrollComboBox
+		}
 		if getattr(sys, 'frozen', False):
 			application_path = sys._MEIPASS
 		else:
 			application_path = os.path.dirname(os.path.abspath(__file__))
 		icon_path = os.path.join(application_path, 'gear_icon.ico')
 		self.setWindowIcon(QIcon(icon_path))
-
-
 		self.options = {}
 		self.widgets = {}
 		self.file_path = ""
@@ -120,6 +129,12 @@ class OptionsEditor(QMainWindow):
 				"Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
 				"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
 		]
+		self.setting_options = {
+				"VoiceChatEffect": ["mw_default", "mw", "mw_classic"],
+				"TargetRefreshRate": ["60", "120"],
+				"Resolution": ["1920x1080", "2560x1440", "3840x2160"],
+				# add more here as needed
+		}
 		self.unsaved_changes = False
 
 		self.log_window = LogWindow(self)
@@ -141,8 +156,37 @@ class OptionsEditor(QMainWindow):
 				padding: 5px;
 			}
 		""")
-
 		self.select_game()
+
+	def get_combobox_options(self, setting):
+		return self.setting_options.get(setting["name"], [])
+
+	def create_widget(self, setting, value):
+		setting_type = self.get_setting_type(setting)
+		widget_class = self.widget_mappings.get(setting_type, QLineEdit)
+		widget = widget_class()
+
+		if isinstance(widget, QSlider):
+			widget.setValue(int(value))
+			widget.valueChanged.connect(self.set_unsaved_changes)
+		elif isinstance(widget, QComboBox):
+			widget.addItems(self.get_combobox_options(setting))
+			widget.setCurrentText(value)
+			widget.currentTextChanged.connect(self.set_unsaved_changes)
+		else:
+			widget.setText(value)
+			widget.textChanged.connect(self.set_unsaved_changes)
+
+		return widget
+
+	def get_setting_type(self, setting):
+		if setting["name"].endswith("Volume") or "Sensitivity" in setting["name"]:
+			return "numeric"
+		elif setting["name"].startswith("Enable") or setting["value"].lower() in ("true", "false"):
+			return "boolean"
+		elif "one of" in setting["comment"]:
+			return "dropdown"
+		return "string"
 
 	def log(self, message):
 		if hasattr(self, 'log_window'):
@@ -162,20 +206,19 @@ class OptionsEditor(QMainWindow):
 		file_menu.addAction(QAction("Exit", self, triggered=self.close))
 
 		view_menu = menu_bar.addMenu("View")
-		self.show_log_action = QAction("Show Log", self, checkable=True)
+		# self.show_log_action = QAction("Show Log", self, checkable=True)
 		self.show_log_action.triggered.connect(self.toggle_log_window)
 		view_menu.addAction(self.show_log_action)
 
 		options_menu = menu_bar.addMenu("Options")
-		self.read_only_action = QAction("Save as Read-only", self, checkable=True)
+		# self.read_only_action = QAction("Save as Read-only", self, checkable=True)
 		options_menu.addAction(self.read_only_action)
 
 	def create_widgets(self):
 		central_widget = QWidget()
 		self.setCentralWidget(central_widget)
-
 		layout = QVBoxLayout()
-		self.tab_widget = QTabWidget()
+		# self.tab_widget = QTabWidget()
 		layout.addWidget(self.tab_widget)
 		central_widget.setLayout(layout)
 
@@ -254,7 +297,7 @@ class OptionsEditor(QMainWindow):
 					files_to_load[file_type] = file_path
 				else:
 					self.log(f"File selection cancelled for {file_type}")
-					return  # Exit the method if user cancels any file selection
+					return
 
 			if len(files_to_load) == 2:  # Both files were selected
 				self.file_path = files_to_load["game_specific"]
