@@ -272,15 +272,13 @@ class OptionsEditor(QMainWindow):
 
         options_menu = menu_bar.addMenu("Options")
         options_menu.addAction(self.read_only_action)
+        clear_settings_action = QAction("Clear All Settings", self)
+        clear_settings_action.triggered.connect(self.clear_all_settings)
+        options_menu.addAction(clear_settings_action)
 
         help_menu = menu_bar.addMenu("Help")
         help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
         help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
-
-        options_menu = self.menuBar().addMenu("Options")
-        clear_settings_action = QAction("Clear All Settings", self)
-        clear_settings_action.triggered.connect(self.clear_all_settings)
-        options_menu.addAction(clear_settings_action)
 
     def show_first_time_warning(self):
         warning_text = """
@@ -609,9 +607,12 @@ class OptionsEditor(QMainWindow):
             widget.setChecked(value.lower() == 'true')
             widget.stateChanged.connect(self.set_unsaved_changes)
         elif re.match(r'^-?\d+(\.\d+)?$', value):
-            return self.create_slider_widget(setting, value)
+            widget = self.create_slider_widget(setting, value)
             if isinstance(widget, QSlider):
                 widget.valueChanged.connect(self.set_unsaved_changes)
+            elif isinstance(widget, tuple):  # For slider with line edit
+                widget[0].valueChanged.connect(self.set_unsaved_changes)
+                widget[1].textChanged.connect(self.set_unsaved_changes)
             else:
                 widget.textChanged.connect(self.set_unsaved_changes)
         elif "one of" in setting['comment']:
