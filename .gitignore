@@ -14,3 +14,4 @@ __pycache__/help_texts.cpython-312.pyc
 CallOfDutyOptionsEditor.exe
 application_log.txt
 /build
+/dist
