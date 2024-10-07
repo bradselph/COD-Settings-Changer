@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
                              QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-                             QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy )
+                             QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy)
 from PyQt5.QtCore import Qt, QRegExp
 from PyQt5.QtGui import QRegExpValidator
 from help_texts import get_help_texts
@@ -16,7 +16,6 @@ import stat
 class GameSelector(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.game = None
         self.setWindowTitle("Select Game")
         self.setFixedSize(300, 200)
 
@@ -50,25 +49,9 @@ class GameSelector(QDialog):
         self.raise_()
         self.activateWindow()
 
-    def select_game(self, game=None):
-        if game:
-            self.selected_game = game
-            self.accept()
-        try:
-            dialog = GameSelector(self)
-            if dialog.exec_():
-                self.game = dialog.selected_game
-                self.selected_game = self.game
-                self.log(f"Selected game: {self.game}")
-                self.load_file(auto=True)
-                self.raise_()
-                self.activateWindow()  # brings the window back to the top after game selection
-            else:
-                self.log("Game selection cancelled")
-                self.close()
-        except Exception as e:
-            self.log(f"Error in select_game: {str(e)}")
-            QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
+    def select_game(self, game):
+        self.selected_game = game
+        self.accept()
 
 class LogWindow(QDockWidget):
     def __init__(self, parent=None):
@@ -173,7 +156,25 @@ class OptionsEditor(QMainWindow):
                 padding: 5px;
             }
         """)
+
         self.select_game()
+
+    def select_game(self):
+        try:
+            dialog = GameSelector(self)
+            if dialog.exec_():
+                self.game = dialog.selected_game
+                self.selected_game = self.game
+                self.log(f"Selected game: {self.game}")
+                self.load_file(auto=True)
+                self.raise_()
+                self.activateWindow()
+            else:
+                self.log("Game selection cancelled")
+                self.close()
+        except Exception as e:
+            self.log(f"Error in select_game: {str(e)}")
+            QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
 
     def get_combobox_options(self, setting):
         return self.setting_options.get(setting["name"], [])
@@ -239,23 +240,6 @@ class OptionsEditor(QMainWindow):
         layout.addWidget(self.tab_widget)
         central_widget.setLayout(layout)
 
-    def select_game(self):
-        try:
-            dialog = GameSelector(self)
-            if dialog.exec_():
-                self.game = dialog.selected_game
-                self.selected_game = self.game
-                self.log(f"Selected game: {self.game}")
-                self.load_file(auto=True)
-                self.raise_()
-                self.activateWindow()
-            else:
-                self.log("Game selection cancelled")
-                self.close()
-        except Exception as e:
-            self.log(f"Error in select_game: {str(e)}")
-            QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
-
     def change_game(self):
         if self.check_unsaved_changes():
             try:
@@ -307,6 +291,9 @@ class OptionsEditor(QMainWindow):
         self.log_window.close()
 
     def load_file(self, auto=False):
+        if not self.game:
+            self.log("No game selected, cannot load file")
+            return
         try:
             self.log("Starting load_file method")
             default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
