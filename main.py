@@ -327,7 +327,7 @@ class OptionsEditor(QMainWindow):
                     self.log(f"File selection cancelled for {file_type}")
                     return
 
-            if len(files_to_load) == 2:  # Both files were selected
+            if len(files_to_load) == 2:
                 self.file_path = files_to_load["game_specific"]
                 self.game_agnostic_file_path = files_to_load["game_agnostic"]
 
