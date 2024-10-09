@@ -15,30 +15,42 @@ def build_executable(main_script="main.py", app_name=None):
     if app_name is None:
         app_name = os.path.splitext(main_script)[0]
 
+    # Check if icon exists
+    icon_path = "gear_icon.ico"
+    if not os.path.exists(icon_path):
+        print(f"Warning: Icon file '{icon_path}' not found!")
+        return
+
     print(f"Building executable for {main_script}...")
 
+    # Base command with icon
     cmd = [
         "pyinstaller",
         "--onefile",
         "--clean",
         "--name", app_name,
         "--noconsole",
-        "--icon", "gear_icon.ico",
+        "--icon", icon_path,
         main_script,
-        "--add-data", "help_texts.py;."
+        "--add-data", f"help_texts.py{os.pathsep}.",
+        "--add-data", f"{icon_path}{os.pathsep}."
     ]
-
-    if os.path.exists("gear_icon.ico"):
-        cmd.extend(["--icon", "gear_icon.ico"])
 
     try:
         subprocess.check_call(cmd)
+        print("\nBuild complete! Your executable can be found in the 'dist' folder.")
+        exe_path = os.path.join('dist', app_name + ('.exe' if sys.platform == 'win32' else ''))
+        print(f"Executable path: {exe_path}")
+
+        # Verify if the executable was created
+        if os.path.exists(exe_path):
+            print("✅ Executable created successfully!")
+        else:
+            print("❌ Executable creation may have failed!")
+
     except subprocess.CalledProcessError as e:
         print(f"Error during build: {e}")
         sys.exit(1)
-
-    print(f"\nBuild complete! Your executable can be found in the 'dist' folder.")
-    print(f"Executable path: {os.path.join('dist', app_name + ('.exe' if sys.platform == 'win32' else ''))}")
 
 if __name__ == "__main__":
     install_requirements()
