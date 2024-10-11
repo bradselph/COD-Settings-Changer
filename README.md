@@ -1,98 +1,100 @@
-# Call of Duty Options Editor - User Guide
+# Call of Duty Options Editor User Guide
 
-## Overview
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+3. [Getting Started](#getting-started)
+4. [Main Interface](#main-interface)
+5. [Loading and Saving Options](#loading-and-saving-options)
+6. [Editing Options](#editing-options)
+7. [Additional Features](#additional-features)
+8. [Troubleshooting](#troubleshooting)
+9. [FAQ](#faq)
 
-The **Call of Duty Options Editor** allows users to customize settings for Call of Duty games like *MW2/Warzone 2023*, *MW3/Warzone 2024*, and the upcoming *Black Ops 6*. This tool is currently in testing and works only for PC users, specifically for Steam and Game Pass versions. It may work for Battle.net, but this is yet unconfirmed. This tool helps users optimize graphics, audio, and other settings to enhance their gaming experience. Always back up your settings files before making changes to prevent any issues.
+## Introduction
+
+The Call of Duty Options Editor is a tool designed to help you customize your Call of Duty game settings. It supports multiple Call of Duty titles and provides an intuitive interface for modifying various game options.
+
+**Warning**: This is an advanced application. Incorrect modifications may affect your game performance or stability. Always backup your settings files before making changes.
+
+## Installation
+
+1. Locate the downloaded .rar file containing the application.
+2. Extract the contents of the .rar file to a location of your choice.
+3. You should find a single .exe file after extraction. This is the Call of Duty Options Editor application.
 
 ## Getting Started
 
-1. **Download and Unzip**: Extract the zipped (.zip) file containing the executable (.exe) to any location on your computer.
-2. **Run the Application**: Double-click the `.exe` file to launch the editor. No installation is required, making it easy to use across systems.
-3. **Select Your Game**: Upon launching, select the game you want to modify (either *MW2/Warzone 2023* or *MW3/Warzone 2024*).
+1. Double-click the .exe file to launch the application.
+2. On first launch, you'll see a warning message about the application's advanced nature. Read it carefully and click "OK" to proceed.
+3. You'll be prompted to select the game you want to modify settings for:
+   - MW2/Warzone 2023
+   - MW3/Warzone 2024
+   - BO6 (currently disabled)
 
 ## Main Interface
 
-### Settings Editor
+The main interface consists of:
+- A menu bar at the top
+- A tabbed interface displaying different categories of settings
+- A log window (can be toggled on/off)
 
-The editor is organized into tabs for graphics, audio, and controls. Each setting has a widget—checkboxes for true/false, sliders for numbers, and dropdowns for options.
+### Menu Bar
+- **File**: Contains options for loading, saving, reloading options, changing games, and exiting.
+- **View**: Allows you to show/hide the log window.
+- **Options**: Includes options to save settings as read-only and clear all settings.
+- **Help**: Provides access to the "About" information and the first-time warning.
 
-- **Graphics Settings**: Adjust resolution, texture quality, shadow quality, and anti-aliasing to balance visuals and performance.
-  - **Resolution**: Higher values improve clarity but may impact performance.
-  - **Texture Quality**: Higher quality provides better visuals but requires more VRAM.
-  - **Shadow Quality**: Higher settings enhance immersion but affect frame rates.
-  - **Anti-Aliasing**: Smooths edges; turning off can boost performance.
+## Loading and Saving Options
 
-- **Audio Settings**: Control volume levels for different game sounds.
-  - **Master Volume**: Adjust overall sound levels.
-  - **Voice Chat Volume**: Balance team communications with in-game sounds.
-  - **Effects Volume**: Adjust the volume of sound effects like explosions.
+### Loading Options
+1. Go to File > Load Options
+2. You'll be prompted to select two files:
+   - A game-specific file (e.g., options.4.cod23.cst for MW3/Warzone 2024)
+   - A game-agnostic file (gamerprofile.0.BASE.cst)
+3. These files are typically located in `~\Documents\Call of Duty\players\`
 
-- **Control Settings**: Customize controls for better gameplay.
-  - **Mouse Sensitivity**: Adjust for faster or more precise aiming.
-  - **ADS Sensitivity**: Fine-tune sensitivity when aiming down sights.
-  - **Controller Deadzone**: Eliminate unintentional movement from thumbstick pressure.
+### Saving Options
+1. After making changes, go to File > Save Options
+2. The changes will be saved to the originally loaded files
+3. If "Save as Read-only" is checked, the files will be set as read-only after saving
 
-### Save Options
+## Editing Options
 
-Click **Save Options** after making changes. Use **Save as Read-only** to prevent the game from overwriting your settings.
+1. Navigate through the tabs to find the option you want to modify.
+2. Each option has a label, an input field (which may be a text box, checkbox, or dropdown), and a comment describing valid values.
+3. Hover over an option to see a tooltip with more information.
+4. Make your desired changes.
+
+## Additional Features
 
 ### Log Window
+- Toggle the log window visibility via View > Show Log
+- The log window displays information about actions performed in the application
 
-The log window records actions taken in the app, such as file saves and errors. This is useful for troubleshooting.
+### Read-only Mode
+- Enable "Save as Read-only" in the Options menu to prevent the game from overwriting your custom settings
 
-## Editing Settings
+### Changing Games
+- Use File > Change Game to switch between supported Call of Duty titles
 
-### Locate and Modify a Setting
+### Clearing Settings
+- Use Options > Clear All Settings to reset the application to its initial state
 
-- **Navigation**: Use tabs to locate the setting you want to change.
-- **Control Widgets**: Adjust values using sliders, checkboxes, or dropdowns.
-- **Advanced Descriptions**: Tooltips provide more information on each setting.
+## Troubleshooting
 
-### Tooltips and Help
+- If the application fails to start, ensure you have the latest version of Windows and all necessary Visual C++ Redistributables installed.
+- If you encounter errors while loading or saving files, check that you have the necessary permissions to read/write in the game's directory.
+- If changes don't appear in-game, verify that the correct files were modified.
 
-Hover over a setting for a detailed description. Tooltips are useful for understanding advanced options like *Nvidia Reflex* or *DLSS Mode*.
+## FAQ
 
-- **Nvidia Reflex**: Reduces system latency for more responsive gameplay.
-- **DLSS Mode**: AI upscaling to improve frame rates without major loss in quality.
+Q: Can using this tool get me banned?
+A: This tool only modifies settings that are normally accessible to users. However, use it at your own risk, as game policies may change.
 
-### Saving Changes
+Q: Why are some options grayed out?
+A: Some options are not editable to prevent potential issues or because they're automatically determined by the game.
 
-Click **Save Options** to apply changes. The **Save as Read-only** option prevents automatic modifications. A confirmation message will appear once changes are saved.
+Q: The application crashed. What should I do?
+A: Check the log file (application_log.txt) for error details.
 
-## Advanced Features
-
-### Load/Reload Options Files
-
-Switch between different saved configurations or reload settings as needed.
-
-### Change Game
-
-Switch between games using **Change Game** from the menu. Save any unsaved changes before switching.
-
-### Clear All Settings
-
-Use **Clear All Settings** to reset everything to default if needed.
-
-### Save Logs
-
-Click **Save Log** to export logs. This is useful for troubleshooting or sharing configuration details.
-
-## Important Notes
-
-### Advanced Warning
-
-This tool is for advanced users. Incorrect changes can cause performance issues. Always back up your settings.
-
-### Read-Only Files
-
-Settings saved as read-only may need adjustments if issues arise. Re-check your settings after game updates.
-
-### System Requirements
-
-Ensure your system has permissions to modify game files. Antivirus software may block the app, so adjust settings as needed.
-
-## Disclaimer
-
-This application is not affiliated with Activision. Use it at your own risk. Always back up important files before making changes.
-
-For more guidance, refer to the tooltips or consult the README file. Online communities can also provide helpful tips for getting the most out of the Call of Duty Options Editor.
