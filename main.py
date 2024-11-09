@@ -182,15 +182,15 @@ class OptionsEditor(QMainWindow):
 
 		self.file_mapping = {
 				"MW2 2022": {
-						"game_specific": "options.3.cod22.cst",
+						"game_specific":    "options.3.cod22.cst",
 						"profile_specific": "settings.3.local.cod22.cst"
 				},
 				"MW3 2023": {
-						"game_specific": "options.4.cod23.cst",
+						"game_specific":    "options.4.cod23.cst",
 						"profile_specific": "gamerprofile.0.BASE.cst"
 				},
 				"BO6 2024": {
-						"game_specific": "s.1.0.cod24.txt",
+						"game_specific":    "s.1.0.cod24.txt",
 						"profile_specific": "g.1.0.l.txt"
 				}
 		}
@@ -450,8 +450,9 @@ class OptionsEditor(QMainWindow):
 			game_specific_path = os.path.join(default_path, game_files["game_specific"])
 			if not auto or not os.path.exists(game_specific_path):
 				game_specific_path = self.get_file_path("game_specific",
-													  game_files["game_specific"],
-													  default_path)
+														game_files["game_specific"],
+														default_path)
+			profile_path = None
 			profile_file_found = False
 			for folder in player_folders:
 				profile_path = os.path.join(folder, game_files["profile_specific"])
@@ -462,8 +463,8 @@ class OptionsEditor(QMainWindow):
 
 			if not profile_file_found:
 				profile_path = self.get_file_path("profile_specific",
-												game_files["profile_specific"],
-												player_folders[0] if player_folders else default_path)
+												  game_files["profile_specific"],
+												  player_folders[0] if player_folders else default_path)
 
 			if game_specific_path and profile_path:
 				self.file_path = game_specific_path
@@ -471,7 +472,7 @@ class OptionsEditor(QMainWindow):
 
 				self.log(f"Loading files: {self.file_path} and {self.profile_path}")
 				self.read_only = not os.access(self.file_path, os.W_OK) or \
-								not os.access(self.profile_path, os.W_OK)
+								 not os.access(self.profile_path, os.W_OK)
 
 				if self.read_only:
 					self.show_read_only_message()
@@ -481,12 +482,12 @@ class OptionsEditor(QMainWindow):
 			else:
 				self.log("File selection incomplete")
 				self.show_error_message("File Selection",
-				"Both files are required to proceed. Please select both files.")
+										"Both files are required to proceed. Please select both files.")
 
 		except Exception as e:
 			self.log(f"Error in load_file: {str(e)}")
 			self.show_error_message("File Loading Error",
-			f"An error occurred while loading files: {str(e)}")
+									f"An error occurred while loading files: {str(e)}")
 
 	def get_file_path(self, file_type, file_name, default_path):
 		message = (f"Please select the {file_type} file:\n"
@@ -507,10 +508,10 @@ class OptionsEditor(QMainWindow):
 				file_filter = "CST Files (*.cst);;All Files (*)"
 
 			file_path, _ = QFileDialog.getOpenFileName(
-				self,
-				f"Select {file_name}",
-				default_path,
-				file_filter
+					self,
+					f"Select {file_name}",
+					default_path,
+					file_filter
 			)
 			if file_path:
 				return file_path
