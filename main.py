@@ -617,8 +617,8 @@ class OptionsEditor(QMainWindow):
 				content = file.read()
 				if file_type == "GameSpecific":
 					if self.game == "BO6 2024":
-						sections = re.split(r'//\n// [A-Za-z ]+\n//', content)[1:]
-						section_names = re.findall(r'//\n// ([A-Za-z ]+)\n//', content)
+						sections = re.split(r'//\n// [A-Za-z]+\n', content)[1:]
+						section_names = re.findall(r'//\n// ([A-Za-z]+)\n', content)
 						separator = '@'
 					else:
 						sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
@@ -650,11 +650,11 @@ class OptionsEditor(QMainWindow):
 								value = value.strip()
 								comment = comment.strip()
 							self.options[name]["settings"].append({
-									"name":      key,
-									"value":     value,
-									"comment":   comment,
-									"editable":  not line.strip().startswith("// DO NOT MODIFY"),
-									"file_type": file_type
+								"name": key,
+								"value": value,
+								"comment": comment,
+								"editable": not line.strip().startswith("// DO NOT MODIFY"),
+								"file_type": file_type
 							})
 		except Exception as e:
 			self.show_error_message("Error", f"Failed to parse options file {file_path}: {str(e)}")
