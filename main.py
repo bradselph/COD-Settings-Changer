@@ -46,37 +46,47 @@ class GameSelector(QDialog):
 		self.setup_window_flags()
 
 	def show_first_time_warning(self):
-		warning_text = """
-		WARNING: Advanced Application
-	
-		This is an advanced application for editing Call of Duty game settings. 
-		Caution should be taken when making changes, as incorrect modifications 
-		may affect your game performance or stability.
-	
-		It is recommended to backup your settings files before making any changes.
-	
-		Use this application at your own risk.
-		"""
+		warning_text = (
+				"<h3 style='color: #FF4444; text-align: center;'>WARNING: Advanced Application</h3>"
+				"<p style='text-align: center;'>This is an advanced application for editing Call of Duty game settings.</p>"
+				"<p style='text-align: center;'>Caution should be taken when making changes, as incorrect modifications "
+				"may affect your game performance or stability.</p>"
+				"<p style='text-align: center;'>It is recommended to backup your settings files before making any changes.</p>"
+				"<p style='text-align: center;'><b>Use this application at your own risk.</b></p>"
+		)
 
 		warning_dialog = QMessageBox(self)
 		warning_dialog.setWindowTitle("First-Time User Warning")
 		warning_dialog.setText(warning_text)
+		warning_dialog.setTextFormat(Qt.RichText)
 		warning_dialog.setIcon(QMessageBox.Warning)
 		warning_dialog.setStandardButtons(QMessageBox.Ok)
 		warning_dialog.exec_()
 
 	def show_read_only_message(self):
-		message = (
-				"The settings files have been saved as read-only. This prevents the game from overwriting your settings.\n\n"
-				"If you encounter any problems or want to allow the game to modify these files again, you can undo this by:\n"
-				"1. Locating the changed files\n"
-				"2. Right-clicking on each file\n"
-				"3. Selecting 'Properties'\n"
-				"4. Unchecking the 'Read-only' attribute\n"
-				"5. Clicking 'Apply' and then 'OK'\n\n"
-				"This will allow the game to modify and overwrite these files again."
-		)
-		QMessageBox.information(self, "Read-only Settings", message)
+		message = """
+		<div style='text-align: center;'>
+			<h3>Read-only Settings Notice</h3>
+			<p>The settings files have been saved as read-only.<br>
+			This prevents the game from overwriting your settings.</p>
+			<p>If you encounter any problems or want to allow the game<br>
+			to modify these files again, you can undo this by:</p>
+			<ol>
+				<li>Locating the changed files</li>
+				<li>Right-clicking on each file</li>
+				<li>Selecting 'Properties'</li>
+				<li>Unchecking the 'Read-only' attribute</li>
+				<li>Clicking 'Apply' and then 'OK'</li>
+			</ol>
+			<p>This will allow the game to modify and overwrite these files again.</p>
+		</div>
+		"""
+		msg_box = QMessageBox(self)
+		msg_box.setWindowTitle("Read-only Settings")
+		msg_box.setText(message)
+		msg_box.setTextFormat(Qt.RichText)
+		msg_box.setIcon(QMessageBox.Information)
+		msg_box.exec_()
 
 	def setup_window_flags(self):
 		self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
@@ -298,52 +308,49 @@ class OptionsEditor(QMainWindow):
 		help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
 
 	def show_first_time_warning(self):
-		warning_text = """
-		WARNING: Advanced Application
-	
-		This is an advanced application for editing Call of Duty game settings. 
-		Caution should be taken when making changes, as incorrect modifications 
-		may affect your game performance or stability.
-	
-		It is recommended to backup your settings files before making any changes.
-	
-		Use this application at your own risk.
-		"""
+		warning_text = (
+				"<h3 style='color: #FF4444; text-align: center;'>WARNING: Advanced Application</h3>"
+				"<p style='text-align: center;'>This is an advanced application for editing Call of Duty game settings.</p>"
+				"<p style='text-align: center;'>Caution should be taken when making changes, as incorrect modifications "
+				"may affect your game performance or stability.</p>"
+				"<p style='text-align: center;'>It is recommended to backup your settings files before making any changes.</p>"
+				"<p style='text-align: center;'><b>Use this application at your own risk.</b></p>"
+		)
 
 		warning_dialog = QMessageBox(self)
 		warning_dialog.setWindowTitle("First-Time User Warning")
 		warning_dialog.setText(warning_text)
+		warning_dialog.setTextFormat(Qt.RichText)
 		warning_dialog.setIcon(QMessageBox.Warning)
 		warning_dialog.setStandardButtons(QMessageBox.Ok)
 		warning_dialog.exec_()
 
 	def show_about_dialog(self):
 		about_text = """
-		Call of Duty Options Editor
-
-		Version: 1.1
-
-		This application is FREE and costs $0. If you paid for this app, you got scammed.
-		
-		This application is designed to edit options for Call of Duty games::
-		```
-		- Modern Warfare 2 2022
-		- Modern Warfare 3/Warzone 2023
-		- Black Ops 6/Warzone* 2024 "*Once game fully transitions over"
-		```
-		DISCLAIMER: This application and its developer are not in any way, shape, or form 
-		tied to or related with Activision, the publisher of Call of Duty games.
-
-
-		Third-party software used:
-		- PyQt5 (GPL v3)
-		- Python (PSF License)
-
+		<div style='text-align: center;'>
+			<h2>Call of Duty Options Editor</h2>
+			<p><b>Version: 1.1</b></p>
+			<p style='color: #FF4444;'><b>This application is FREE and costs $0.<br>
+			If you paid for this app, you got scammed.</b></p>
+			<p>This application is designed to edit options for Call of Duty games:</p>
+			<ul style='list-style-type: none;'>
+				<li>- Modern Warfare 2 2022</li>
+				<li>- Modern Warfare 3/Warzone 2023</li>
+				<li>- Black Ops 6/Warzone* 2024 "*Once game fully transitions over"</li>
+			</ul>
+			<p style='color: #666;'><i>DISCLAIMER: This application and its developer are not in any way,<br>
+			shape, or form tied to or related with Activision, the publisher of Call of Duty games.</i></p>
+			<p><b>Third-party software used:</b></p>
+			<ul style='list-style-type: none;'>
+				<li>- PyQt5 (GPL v3)</li>
+				<li>- Python (PSF License)</li>
+			</ul>
+		</div>
 		"""
-
 		about_dialog = QMessageBox(self)
 		about_dialog.setWindowTitle("About")
 		about_dialog.setText(about_text)
+		about_dialog.setTextFormat(Qt.RichText)
 		about_dialog.setIcon(QMessageBox.Information)
 		about_dialog.exec_()
 
@@ -490,10 +497,15 @@ class OptionsEditor(QMainWindow):
 									f"An error occurred while loading files: {str(e)}")
 
 	def get_file_path(self, file_type, file_name, default_path):
-		message = (f"Please select the {file_type} file:\n"
-				   f"{file_name}\n\n"
-				   f"This file is typically located in:\n"
-				   f"{default_path}")
+		message = f"""
+			<div style='text-align: center;'>
+			<h3>Select {file_type} File</h3>
+			<p>Please select the file:<br>
+			<b>{file_name}</b></p>
+			<p>This file is typically located in:<br>
+			<i>{default_path}</i></p>
+			</div>
+			"""
 
 		msg_box = QMessageBox(QMessageBox.Information, "Select File", message)
 		msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
@@ -544,9 +556,19 @@ class OptionsEditor(QMainWindow):
 
 	def show_bo6_warning(self):
 		if self.game == "BO6 2024":
-			msg = ("Note: BO6 2024 uses a different file format (.txt) than previous games.\n"
-				   "Make sure you're selecting the correct files.")
-			QMessageBox.information(self, "BO6 File Format", msg)
+			message = """
+			<div style='text-align: center;'>
+				<h3 style='color: #FFA500;'>Important Note</h3>
+				<p>BO6 2024 uses a different file format (.txt) than previous games.</p>
+				<p><b>Make sure you're selecting the correct files.</b></p>
+			</div>
+			"""
+			msg_box = QMessageBox(self)
+			msg_box.setWindowTitle("BO6 File Format")
+			msg_box.setText(message)
+			msg_box.setTextFormat(Qt.RichText)
+			msg_box.setIcon(QMessageBox.Information)
+			msg_box.exec_()
 
 	def show_read_only_message(self):
 		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
@@ -557,8 +579,17 @@ class OptionsEditor(QMainWindow):
 		msg_box.exec_()
 
 	def show_error_message(self, title, message):
-		msg_box = QMessageBox(QMessageBox.Critical, title, message)
-		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+		formatted_message = f"""
+		<div style='text-align: center;'>
+			<h3 style='color: #FF4444;'>Error Occurred</h3>
+			<p>{message}</p>
+		</div>
+		"""
+		msg_box = QMessageBox(self)
+		msg_box.setWindowTitle(title)
+		msg_box.setText(formatted_message)
+		msg_box.setTextFormat(Qt.RichText)
+		msg_box.setIcon(QMessageBox.Critical)
 		msg_box.exec_()
 
 	def validate_file_format(self, file_path):
@@ -913,10 +944,19 @@ class OptionsEditor(QMainWindow):
 
 	def check_unsaved_changes(self):
 		if self.unsaved_changes:
-			reply = QMessageBox.question(self, 'Unsaved Changes',
-										 "You have unsaved changes. Do you want to save them?",
-										 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-										 QMessageBox.Save)
+			reply = QMessageBox.question(
+					self,
+					'Unsaved Changes',
+					"""
+					<div style='text-align: center;'>
+						<h3>Unsaved Changes</h3>
+						<p>You have unsaved changes.<br>
+						Would you like to save them?</p>
+					</div>
+					""",
+					QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+					QMessageBox.Save
+			)
 			if reply == QMessageBox.Save:
 				self.save_options()
 				return True
@@ -939,7 +979,18 @@ def main():
 		sys.exit(app.exec_())
 	except Exception as e:
 		print(f"Unhandled exception in main: {str(e)}")
-		QMessageBox.critical(None, "Critical Error", f"An unhandled error occurred: {str(e)}")
+		QMessageBox.critical(
+				None,
+				"Critical Error",
+				f"""
+	<div style='text-align: center;'>
+		<h3 style='color: #FF4444;'>Critical Error</h3>
+		<p>An unhandled error occurred:</p>
+		<p><b>{str(e)}</b></p>
+	</div>
+	""",
+				QMessageBox.Ok
+		)
 		sys.exit(1)
 
 
