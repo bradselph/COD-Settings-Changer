@@ -35,7 +35,6 @@ def build_executable(python_executable, main_script="main.py", app_name=None):
     if app_name is None:
         app_name = os.path.splitext(main_script)[0]
 
-    # Check if icon exists
     icon_path = "gear_icon.ico"
     if not os.path.exists(icon_path):
         print(f"Warning: Icon file '{icon_path}' not found!")
@@ -43,7 +42,6 @@ def build_executable(python_executable, main_script="main.py", app_name=None):
 
     print(f"Building executable for {main_script}...")
 
-    # Base command with icon
     cmd = [
         python_executable, "-m", "PyInstaller",
         "--onefile",
@@ -63,11 +61,10 @@ def build_executable(python_executable, main_script="main.py", app_name=None):
         exe_path = os.path.join('dist', app_name + ('.exe' if platform.system() == 'Windows' else ''))
         print(f"Executable path: {exe_path}")
 
-        # Verify if the executable was created
         if os.path.exists(exe_path):
-            print("✅ Executable created successfully!")
+            print("Executable created successfully!")
         else:
-            print("❌ Executable creation may have failed!")
+            print("Executable creation may have failed!")
 
     except subprocess.CalledProcessError as e:
         print(f"Error during build: {e}")
@@ -83,7 +80,6 @@ def main():
     else:
         python_executable = os.path.join("venv", "bin", "python")
 
-    # Run the entire process in a new shell with the activated virtual environment
     build_command = f"{activate_cmd} && {python_executable} -c \"import sys; from build import install_requirements, build_executable; install_requirements(sys.executable); build_executable(sys.executable)\""
 
     try:
