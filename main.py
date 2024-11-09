@@ -14,7 +14,6 @@ from help_texts import get_help_texts
 
 
 class GameSelector(QDialog):
-
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setWindowTitle("Select Game")
@@ -181,6 +180,21 @@ class OptionsEditor(QMainWindow):
 				"Resolution":        ["1920x1080", "2560x1440", "3840x2160"],
 				# add more here as needed
 		}
+		self.file_mapping = {
+				"MW2 2022": {
+						"game_specific": "options.3.cod22.cst",
+						"profile_specific": "settings.3.local.cod22.cst"
+				},
+				"MW3 2023": {
+						"game_specific": "options.4.cod23.cst",
+						"profile_specific": "gamerprofile.0.BASE.cst"
+				},
+				"BO6 2024": {
+						"game_specific": "s.1.0.cod24.txt",
+						"profile_specific": "g.1.0.l.txt"
+				}
+		}
+
 		self.unsaved_changes = False
 
 		self.log_window = LogWindow(self)
@@ -422,35 +436,42 @@ class OptionsEditor(QMainWindow):
 			self.log("No game selected, cannot load file")
 			return
 		try:
-			game_type = "Black Ops 6" if self.game == "BO6" else self.game
 			self.log("Starting load_file method")
 			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-			file_names = {
-					"game_specific": ("s.1.0.cod24.txt" if self.game == "BO6" else
-						  "options.4.cod23.cst" if self.game == "MW3/Warzone 2024" else
-						  "options.3.cod22.cst"),
-					"game_agnostic": ("gamerprofile.pc.0.BASE.cst" if self.game == "BO6" else
-						  "gamerprofile.0.BASE.cst")
-			}
+			base_path = os.path.expanduser("~\\Documents\\Call of Duty")
+			player_folders = self.find_player_folders(base_path)
+			game_files = self.file_mapping.get(self.game)
+			if not game_files:
+				self.log(f"No file mapping found for {self.game}")
+				return
 
 			files_to_load = {}
-			for file_type, file_name in file_names.items():
-				file_path = os.path.join(default_path, file_name)
-				if not auto or not os.path.exists(file_path):
-					file_path = self.get_file_path(file_type, file_name, default_path)
+			game_specific_path = os.path.join(default_path, game_files["game_specific"])
+			if not auto or not os.path.exists(game_specific_path):
+				game_specific_path = self.get_file_path("game_specific",
+													  game_files["game_specific"],
+													  default_path)
+			profile_file_found = False
+			for folder in player_folders:
+				profile_path = os.path.join(folder, game_files["profile_specific"])
+				if os.path.exists(profile_path):
+					files_to_load["profile_specific"] = profile_path
+					profile_file_found = True
+					break
 
-				if file_path:
-					files_to_load[file_type] = file_path
-				else:
-					self.log(f"File selection cancelled for {file_type}")
-					return
+			if not profile_file_found:
+				profile_path = self.get_file_path("profile_specific",
+												game_files["profile_specific"],
+												player_folders[0] if player_folders else default_path)
 
-			if len(files_to_load) == 2:
-				self.file_path = files_to_load["game_specific"]
-				self.game_agnostic_file_path = files_to_load["game_agnostic"]
+			if game_specific_path and profile_path:
+				self.file_path = game_specific_path
+				self.profile_path = profile_path
 
-				self.log(f"Loading files: {self.file_path} and {self.game_agnostic_file_path}")
-				self.read_only = not os.access(self.file_path, os.W_OK) or not os.access(self.game_agnostic_file_path, os.W_OK)
+				self.log(f"Loading files: {self.file_path} and {self.profile_path}")
+				self.read_only = not os.access(self.file_path, os.W_OK) or \
+								not os.access(self.profile_path, os.W_OK)
+
 				if self.read_only:
 					self.show_read_only_message()
 				self.parse_options_file()
@@ -458,12 +479,24 @@ class OptionsEditor(QMainWindow):
 				self.unsaved_changes = False
 			else:
 				self.log("File selection incomplete")
-				self.show_error_message("File Selection", "Both files are required to proceed. Please select both files.")
+				self.show_error_message("File Selection",
+				"Both files are required to proceed. Please select both files.")
+
 		except Exception as e:
 			self.log(f"Error in load_file: {str(e)}")
-			self.show_error_message("File Loading Error", f"An error occurred while loading files: {str(e)}")
+			self.show_error_message("File Loading Error",
+			f"An error occurred while loading files: {str(e)}")
 
 	def get_file_path(self, file_type, file_name, default_path):
+		message = (
+				f"Please select the {file_type} file:\n"
+				f"{file_name}\n\n"
+				f"This file is typically located in:\n"
+				f"{default_path}\n\n"
+				"Note: If you have multiple Battle.net accounts, look for a folder named:\n"
+				"'<numbers>_<more_numbers>'\n\n"
+				"The correct folder will contain your most recent game settings.")
+
 		message = (f"Please select the {file_type} file:\n"
 				   f"{file_name}\n\n"
 				   f"This file is typically located in:\n"
@@ -486,6 +519,28 @@ class OptionsEditor(QMainWindow):
 		else:
 			self.log(f"File selection cancelled for {file_type}")
 			return None
+
+	def find_player_folders(self, base_path):
+		"""Scan for all possible player folders"""
+		player_folders = []
+		try:
+			if os.path.exists(os.path.join(base_path, "players")):
+				player_folders.append(os.path.join(base_path, "players"))
+
+			steam_pattern = re.compile(r"765\d{11,13}")
+
+			bnet_pattern = re.compile(r"253\d{11,13}")
+
+			for item in os.listdir(base_path):
+				if steam_pattern.match(item) or bnet_pattern.match(item):
+					full_path = os.path.join(base_path, item)
+					if os.path.isdir(full_path):
+						player_folders.append(full_path)
+			player_folders.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+			return player_folders
+		except Exception as e:
+			self.log(f"Error scanning for player folders: {str(e)}")
+			return [os.path.join(base_path, "players")]
 
 	def show_read_only_message(self):
 		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
