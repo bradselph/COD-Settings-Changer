@@ -28,9 +28,9 @@ The Call of Duty Options Editor is a tool designed to help you customize your Ca
 1. Double-click the .exe file to launch the application.
 2. On first launch, you'll see a warning message about the application's advanced nature. Read it carefully and click "OK" to proceed.
 3. You'll be prompted to select the game you want to modify settings for:
-   - MW2/Warzone 2023
-   - MW3/Warzone 2024
-   - BO6 (currently disabled)
+   - Modern Warfare 2 2022
+   - Modern Warfare 3/Warzone 2023
+   - Black Ops 6/Warzone* 2024 (*Once game fully transitions over)
 
 ## Main Interface
 
@@ -48,32 +48,40 @@ The main interface consists of:
 ## Loading and Saving Options
 
 ### Loading Options
-1. Go to File > Load Options
-2. You'll be prompted to select two files:
-   - A game-specific file (e.g., options.4.cod23.cst for MW3/Warzone 2024)
-   - A game-agnostic file (gamerprofile.0.BASE.cst)
-3. These files are typically located in `~\Documents\Call of Duty\players\`
+1. The application will automatically attempt to locate your game files
+2. If files aren't found automatically, you'll be prompted to select two files:
+   - For MW2 2022: options.3.cod22.cst and settings.3.local.cod22.cst
+   - For MW3 2023: options.4.cod23.cst and gamerprofile.0.BASE.cst
+   - For BO6 2024: s.1.0.cod24.txt and g.1.0.l.txt
 
 ### Saving Options
 1. After making changes, go to File > Save Options
 2. The changes will be saved to the originally loaded files
-3. If "Save as Read-only" is checked, the files will be set as read-only after saving
+3. Optional: Enable "Save as Read-only" to prevent the game from overwriting your settings
 
 ## Editing Options
 
 1. Navigate through the tabs to find the option you want to modify.
-2. Each option has a label, an input field (which may be a text box, checkbox, or dropdown), and a comment describing valid values.
-3. Hover over an option to see a tooltip with more information.
-4. Make your desired changes.
+2. Each option displays:
+   - Setting name
+   - Input field (slider, checkbox, dropdown, or text box)
+   - Valid value range or options
+   - File type (GameSpecific or GameAgnostic)
+3. Hover over any option to see detailed help text
+4. Changes are marked as unsaved until you save them
 
 ## Additional Features
 
 ### Log Window
-- Toggle the log window visibility via View > Show Log
-- The log window displays information about actions performed in the application
+- Toggle via View > Show Log
+- Tracks all actions and changes
+- Can be detached and positioned separately
+- Save log contents for troubleshooting
 
 ### Read-only Mode
-- Enable "Save as Read-only" in the Options menu to prevent the game from overwriting your custom settings
+- Option to save files as read-only
+- Prevents game from overwriting your settings
+- Can be toggled before saving
 
 ### Changing Games
 - Use File > Change Game to switch between supported Call of Duty titles
@@ -83,18 +91,26 @@ The main interface consists of:
 
 ## Troubleshooting
 
-- If the application fails to start, ensure you have the latest version of Windows and all necessary Visual C++ Redistributables installed.
-- If you encounter errors while loading or saving files, check that you have the necessary permissions to read/write in the game's directory.
-- If changes don't appear in-game, verify that the correct files were modified.
+- If files aren't detected automatically, ensure you're looking in the correct directory:
+  - Default: `~\Documents\Call of Duty\players\`
+  - Steam: `~\Documents\Call of Duty\[Steam ID]\`
+  - Battle.net: `~\Documents\Call of Duty\[Battle.net ID]\`
+- For BO6 2024, make sure you're selecting .txt files instead of .cst files
+- Check application_log.txt for detailed error information
 
 ## FAQ
 
 Q: Can using this tool get me banned?
-A: This tool only modifies settings that are normally accessible to users. However, use it at your own risk, as game policies may change.
+A: This tool only modifies official game settings files in supported ways. However, use at your own risk as game policies may change.
 
 Q: Why are some options grayed out?
-A: Some options are not editable to prevent potential issues or because they're automatically determined by the game.
+A: Some options are read-only to prevent potential issues or because they're automatically determined by the game.
+
+Q: What's the difference between GameSpecific and GameAgnostic settings?
+A: GameSpecific settings are unique to each game, while GameAgnostic settings apply across different Call of Duty titles.
+
+Q: Will my settings persist after game updates?
+A: Yes, if you've saved them as read-only. Otherwise, game updates might reset them to defaults.
 
 Q: The application crashed. What should I do?
-A: Check the log file (application_log.txt) for error details.
-
+A: Check the log file (application_log.txt) for error details, ensure you have the latest Windows updates and Visual C++ Redistributables installed.
