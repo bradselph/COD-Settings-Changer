@@ -229,6 +229,10 @@ class OptionsEditor(QMainWindow):
 
 		self.select_game()
 
+	def setup_message_box(self, msg_box):
+		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
+		return msg_box
+
 	def select_game(self):
 		try:
 			dialog = GameSelector(self)
@@ -352,7 +356,7 @@ class OptionsEditor(QMainWindow):
 		about_dialog.setText(about_text)
 		about_dialog.setTextFormat(Qt.RichText)
 		about_dialog.setIcon(QMessageBox.Information)
-		about_dialog.exec_()
+		self.setup_message_box(about_dialog).exec_()
 
 	def clear_all_settings(self):
 		reply = QMessageBox.question(self, 'Clear Settings',
@@ -476,6 +480,7 @@ class OptionsEditor(QMainWindow):
 			if game_specific_path and profile_path:
 				self.file_path = game_specific_path
 				self.profile_path = profile_path
+				self.game_agnostic_file_path = profile_path
 
 				self.log(f"Loading files: {self.file_path} and {self.profile_path}")
 				self.read_only = not os.access(self.file_path, os.W_OK) or \
@@ -590,7 +595,7 @@ class OptionsEditor(QMainWindow):
 		msg_box.setText(formatted_message)
 		msg_box.setTextFormat(Qt.RichText)
 		msg_box.setIcon(QMessageBox.Critical)
-		msg_box.exec_()
+		self.setup_message_box(msg_box).exec_()
 
 	def validate_file_format(self, file_path):
 		"""Validate file format matches game type"""
@@ -944,7 +949,7 @@ class OptionsEditor(QMainWindow):
 
 	def check_unsaved_changes(self):
 		if self.unsaved_changes:
-			reply = QMessageBox.question(
+			msg_box = QMessageBox.question(
 					self,
 					'Unsaved Changes',
 					"""
@@ -957,6 +962,8 @@ class OptionsEditor(QMainWindow):
 					QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
 					QMessageBox.Save
 			)
+			msg_box = self.setup_message_box(msg_box)
+			reply = msg_box.exec_()
 			if reply == QMessageBox.Save:
 				self.save_options()
 				return True
@@ -983,12 +990,12 @@ def main():
 				None,
 				"Critical Error",
 				f"""
-	<div style='text-align: center;'>
-		<h3 style='color: #FF4444;'>Critical Error</h3>
-		<p>An unhandled error occurred:</p>
-		<p><b>{str(e)}</b></p>
-	</div>
-	""",
+				<div style='text-align: center;'>
+					<h3 style='color: #FF4444;'>Critical Error</h3>
+					<p>An unhandled error occurred:</p>
+					<p><b>{str(e)}</b></p>
+				</div>
+				""",
 				QMessageBox.Ok
 		)
 		sys.exit(1)
