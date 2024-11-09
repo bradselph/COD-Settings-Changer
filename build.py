@@ -31,10 +31,8 @@ def install_requirements(python_executable):
     subprocess.check_call([python_executable, "-m", "pip", "install", "--upgrade", "pip"])
     subprocess.check_call([python_executable, "-m", "pip", "install", "PyQt5", "pyinstaller"])
 
-def build_executable(python_executable, main_script="main.py", app_name=None):
-    if app_name is None:
-        app_name = os.path.splitext(main_script)[0]
-
+def build_executable(python_executable, main_script="main.py"):
+    app_name = "COD-Settings-Changer"
     icon_path = "gear_icon.ico"
     if not os.path.exists(icon_path):
         print(f"Warning: Icon file '{icon_path}' not found!")
