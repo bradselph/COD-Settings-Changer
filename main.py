@@ -178,8 +178,8 @@ class OptionsEditor(QMainWindow):
 				"VoiceChatEffect":   ["mw_default", "mw", "mw_classic"],
 				"TargetRefreshRate": ["60", "120"],
 				"Resolution":        ["1920x1080", "2560x1440", "3840x2160"],
-				# add more here as needed
 		}
+
 		self.file_mapping = {
 				"MW2 2022": {
 						"game_specific": "options.3.cod22.cst",
@@ -326,10 +326,11 @@ class OptionsEditor(QMainWindow):
 		This application is FREE and costs $0. If you paid for this app, you got scammed.
 		
 		This application is designed to edit options for Call of Duty games::
+		```
 		- Modern Warfare 2 2022
 		- Modern Warfare 3/Warzone 2023
 		- Black Ops 6/Warzone* 2024 "*Once game fully transitions over"
-
+		```
 		DISCLAIMER: This application and its developer are not in any way, shape, or form 
 		tied to or related with Activision, the publisher of Call of Duty games.
 
@@ -488,15 +489,6 @@ class OptionsEditor(QMainWindow):
 			f"An error occurred while loading files: {str(e)}")
 
 	def get_file_path(self, file_type, file_name, default_path):
-		message = (
-				f"Please select the {file_type} file:\n"
-				f"{file_name}\n\n"
-				f"This file is typically located in:\n"
-				f"{default_path}\n\n"
-				"Note: If you have multiple Battle.net accounts, look for a folder named:\n"
-				"'<numbers>_<more_numbers>'\n\n"
-				"The correct folder will contain your most recent game settings.")
-
 		message = (f"Please select the {file_type} file:\n"
 				   f"{file_name}\n\n"
 				   f"This file is typically located in:\n"
@@ -509,16 +501,23 @@ class OptionsEditor(QMainWindow):
 
 		result = msg_box.exec_()
 		if result == QMessageBox.Ok:
-			file_path, _ = QFileDialog.getOpenFileName(self, f"Select {file_name}", default_path,
-													   "CST Files (*.cst);;TXT Files (*.txt);;All Files (*)")
+			if self.game == "BO6 2024":
+				file_filter = "Text Files (*.txt);;All Files (*)"
+			else:
+				file_filter = "CST Files (*.cst);;All Files (*)"
+
+			file_path, _ = QFileDialog.getOpenFileName(
+				self,
+				f"Select {file_name}",
+				default_path,
+				file_filter
+			)
 			if file_path:
 				return file_path
-			else:
-				self.log(f"No file selected for {file_type}")
-				return None
-		else:
-			self.log(f"File selection cancelled for {file_type}")
+			self.log(f"No file selected for {file_type}")
 			return None
+		self.log(f"File selection cancelled for {file_type}")
+		return None
 
 	def find_player_folders(self, base_path):
 		"""Scan for all possible player folders"""
@@ -542,6 +541,12 @@ class OptionsEditor(QMainWindow):
 			self.log(f"Error scanning for player folders: {str(e)}")
 			return [os.path.join(base_path, "players")]
 
+	def show_bo6_warning(self):
+		if self.game == "BO6 2024":
+			msg = ("Note: BO6 2024 uses a different file format (.txt) than previous games.\n"
+				   "Make sure you're selecting the correct files.")
+			QMessageBox.information(self, "BO6 File Format", msg)
+
 	def show_read_only_message(self):
 		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
 							  "One or both of the selected files are read-only. "
@@ -555,6 +560,14 @@ class OptionsEditor(QMainWindow):
 		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
 		msg_box.exec_()
 
+	def validate_file_format(self, file_path):
+		"""Validate file format matches game type"""
+		if self.game == "BO6 2024" and not file_path.lower().endswith('.txt'):
+			return False
+		elif self.game != "BO6 2024" and not file_path.lower().endswith('.cst'):
+			return False
+		return True
+
 	def parse_options_file(self):
 		self.options.clear()
 		self.parse_file(self.file_path, "GameSpecific")
@@ -566,15 +579,18 @@ class OptionsEditor(QMainWindow):
 			with open(file_path, 'r') as file:
 				content = file.read()
 				if file_type == "GameSpecific":
-					if self.game == "BO6":
+					if self.game == "BO6 2024":
 						sections = re.split(r'//\n// [A-Za-z ]+\n//', content)[1:]
 						section_names = re.findall(r'//\n// ([A-Za-z ]+)\n//', content)
+						separator = '@'
 					else:
 						sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
 						section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
+						separator = ':'
 				else:  # GameAgnostic
 					sections = [content]
 					section_names = ["GameAgnostic"]
+					separator = '@' if self.game == "BO6 2024" else ':'
 
 				for name, section in zip(section_names, sections):
 					if name not in self.options:
@@ -584,7 +600,7 @@ class OptionsEditor(QMainWindow):
 						if '=' in line and not line.strip().startswith('//'):
 							key, value = line.split('=', 1)
 							if file_type == "GameSpecific":
-								if self.game == "BO6":
+								if self.game == "BO6 2024":
 									key = key.split('@')[0].strip()
 								else:
 									key = key.split(':')[0].strip()
@@ -820,7 +836,7 @@ class OptionsEditor(QMainWindow):
 				if '=' in line and not line.strip().startswith('//'):
 					key = line.split('=', 1)[0].strip()
 					if file_type == "GameSpecific":
-						if self.game == "BO6":
+						if self.game == "BO6 2024":
 							key = key.split('@')[0]
 						else:
 							key = key.split(':')[0]
@@ -872,15 +888,20 @@ class OptionsEditor(QMainWindow):
 		return True
 
 	def format_line(self, file_type, line, setting, value):
-		if file_type == "GameSpecific":
-			if self.game == "BO6":
-				separator = "@" if "@" in line else "="
-				return f"{line.split(separator)[0]}{separator} {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-			else:
-				return f"{line.split(':')[0]}: \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-		else:  # GameAgnostic
+		if self.game == "BO6 2024":
 			separator = "@" if "@" in line else "="
-			return f"{line.split(separator)[0]}{separator} {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+			before_separator = line.split(separator)[0]
+			if "@" in line:
+				before_separator = line.split("=")[0]
+			return f"{before_separator} = {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+		else:
+			if file_type == "GameSpecific":
+				version_num = line.split(":")[1].split("=")[0].strip() if ":" in line else "0.0"
+				return f"{line.split(':')[0]}:{version_num} = \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+			else:
+				separator = "@" if "@" in line else "="
+				before_separator = line.split(separator)[0]
+				return f"{before_separator}{separator} {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
 
 	def reload_file(self):
 		if self.file_path and self.game_agnostic_file_path:
