@@ -18,3 +18,4 @@ application_log.txt
 COD-Settings-Changer.spec
 README-ANALYZER.txt
 /venv
+__pycache__/build.cpython-312.pyc
