@@ -3,12 +3,13 @@ import re
 import stat
 import sys
 
-from PyQt5.QtCore import QSettings, Qt
+from PyQt5.QtCore import QSettings, Qt, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
-							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget, QHBoxLayout, QSizePolicy)
+							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
+							 QHBoxLayout, QSizePolicy)
 
 from help_texts import get_help_texts
 
@@ -146,7 +147,6 @@ class NoScrollSlider(QSlider):
 class NoScrollComboBox(QComboBox):
 	def wheelEvent(self, event):
 		event.ignore()
-
 
 class OptionsEditor(QMainWindow):
 	def __init__(self):
@@ -390,8 +390,91 @@ class OptionsEditor(QMainWindow):
 		central_widget = QWidget()
 		self.setCentralWidget(central_widget)
 		layout = QVBoxLayout()
+
+		# search widgets at the top
+		search_layout = self.create_search_widgets()
+		layout.addLayout(search_layout)
+
+		# tab widgets at the bottom
 		layout.addWidget(self.tab_widget)
 		central_widget.setLayout(layout)
+
+	def create_search_widgets(self):
+		search_layout = QHBoxLayout()
+
+		self.search_bar = QLineEdit()
+		self.search_bar.setPlaceholderText("Search settings...")
+		self.search_bar.setClearButtonEnabled(True)
+		self.search_bar.textChanged.connect(self.filter_settings)
+
+		self.category_filter = QComboBox()
+		self.category_filter.addItem("All Categories")
+		for section_name in self.options.keys():
+			self.category_filter.addItem(section_name)
+		self.category_filter.currentTextChanged.connect(self.filter_settings)
+
+		search_layout.addWidget(QLabel("Search:"))
+		search_layout.addWidget(self.search_bar)
+		search_layout.addWidget(QLabel("Category:"))
+		search_layout.addWidget(self.category_filter)
+
+		return search_layout
+
+	def filter_settings(self):
+		search_text = self.search_bar.text().lower()
+		selected_category = self.category_filter.currentText()
+
+		for tab_index in range(self.tab_widget.count()):
+			tab_name = self.tab_widget.tabText(tab_index)
+			scroll_area = self.tab_widget.widget(tab_index)
+
+			if selected_category != "All Categories" and selected_category != tab_name:
+				self.tab_widget.setTabEnabled(tab_index, False)
+				continue
+
+			self.tab_widget.setTabEnabled(tab_index, True)
+
+			if isinstance(scroll_area, QScrollArea):
+				scroll_widget = scroll_area.widget()
+				if scroll_widget and scroll_widget.layout():
+					layout = scroll_widget.layout()
+					rows_visible = False
+
+					for i in range(layout.rowCount()):
+						show_row = True
+						label_item = layout.itemAtPosition(i, 0)
+						if label_item and label_item.widget():
+							setting_name = label_item.widget().text().lower().rstrip(':')
+							setting_visible = True
+
+							if search_text:
+								setting_visible = False
+								if search_text in setting_name:
+									setting_visible = True
+								elif setting_name in self.help_texts:
+									help_text = self.help_texts[setting_name].lower()
+									if search_text in help_text:
+										setting_visible = True
+								else:
+									value_item = layout.itemAtPosition(i, 1)
+									if value_item and value_item.widget():
+										widget = value_item.widget()
+										if isinstance(widget, QLineEdit):
+											if search_text in widget.text().lower():
+												setting_visible = True
+										elif isinstance(widget, QComboBox):
+											if search_text in widget.currentText().lower():
+												setting_visible = True
+
+							show_row = setting_visible
+							rows_visible = rows_visible or show_row
+
+						for col in range(layout.columnCount()):
+							item = layout.itemAtPosition(i, col)
+							if item and item.widget():
+								item.widget().setVisible(show_row)
+
+					self.tab_widget.setTabEnabled(tab_index, rows_visible)
 
 	def change_game(self):
 		if self.check_unsaved_changes():
@@ -663,6 +746,9 @@ class OptionsEditor(QMainWindow):
 	def display_options(self):
 		self.tab_widget.clear()
 		self.widgets.clear()
+		if not hasattr(self, 'search_bar'):
+			search_layout = self.create_search_widgets()
+			self.layout().insertLayout(0, search_layout)
 		for section, data in self.options.items():
 			scroll_area = QScrollArea()
 			scroll_widget = QWidget()
