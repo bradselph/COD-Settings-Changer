@@ -444,68 +444,58 @@ class OptionsEditor(QMainWindow):
 		try:
 			search_text = self.search_bar.text().lower()
 			selected_category = self.category_filter.currentText()
-
 			current_tab = self.tab_widget.currentIndex()
-
 			for tab_index in range(self.tab_widget.count()):
 				tab_name = self.tab_widget.tabText(tab_index)
 				scroll_area = self.tab_widget.widget(tab_index)
-
 				if selected_category != "All Categories" and selected_category != tab_name:
 					self.tab_widget.setTabEnabled(tab_index, False)
 					continue
-
 				self.tab_widget.setTabEnabled(tab_index, True)
-
-				if isinstance(scroll_area, QScrollArea):
-					scroll_widget = scroll_area.widget()
-					if scroll_widget and scroll_widget.layout():
-						layout = scroll_widget.layout()
-						any_visible = False
-
-						for i in range(layout.rowCount()):
-							show_row = False
-							label_item = layout.itemAtPosition(i, 0)
-
-							if label_item and label_item.widget():
-								setting_name = label_item.widget().text().lower().rstrip(':')
-
-								if not search_text:
-									show_row = True
-								else:
-									if search_text in setting_name:
-										show_row = True
-									elif setting_name in self.help_texts:
-										help_text = self.help_texts[setting_name].lower()
-										if search_text in help_text:
-											show_row = True
-									else:
-										value_item = layout.itemAtPosition(i, 1)
-										if value_item and value_item.widget():
-											widget = value_item.widget()
-											if isinstance(widget, QLineEdit):
-												if search_text in widget.text().lower():
-													show_row = True
-											elif isinstance(widget, QComboBox):
-												if search_text in widget.currentText().lower():
-													show_row = True
-											elif isinstance(widget, QCheckBox):
-												if search_text in str(widget.isChecked()).lower():
-													show_row = True
-
-								for col in range(layout.columnCount()):
-									item = layout.itemAtPosition(i, col)
-									if item and item.widget():
-										item.widget().setVisible(show_row)
-										if show_row:
-											any_visible = True
-
-						self.tab_widget.setTabEnabled(tab_index, any_visible)
-						if not any_visible:
-							self.tab_widget.setTabVisible(tab_index, False)
+				if not isinstance(scroll_area, QScrollArea):
+					continue
+				scroll_widget = scroll_area.widget()
+				if not scroll_widget or not scroll_widget.layout():
+					continue
+				layout = scroll_widget.layout()
+				any_visible = False
+				for i in range(layout.rowCount()):
+					label_item = layout.itemAtPosition(i, 0)
+					if not label_item or not label_item.widget():
+						continue
+					setting_name = label_item.widget().text().lower().rstrip(':')
+					show_row = False
+					if not search_text:
+						show_row = True
+					else:
+						if search_text in setting_name:
+							show_row = True
+						elif setting_name in self.help_texts:
+							help_text = self.help_texts[setting_name].lower()
+							if search_text in help_text:
+								show_row = True
 						else:
-							self.tab_widget.setTabVisible(tab_index, True)
-
+							value_item = layout.itemAtPosition(i, 1)
+							if value_item and value_item.widget():
+								widget = value_item.widget()
+								if isinstance(widget, QLineEdit):
+									if search_text in widget.text().lower():
+										show_row = True
+								elif isinstance(widget, QComboBox):
+									if search_text in widget.currentText().lower():
+										show_row = True
+								elif isinstance(widget, QCheckBox):
+									if search_text in str(widget.isChecked()).lower():
+										show_row = True
+					for col in range(layout.columnCount()):
+						item = layout.itemAtPosition(i, col)
+						if item and item.widget():
+							item.widget().setVisible(show_row)
+							if show_row:
+								any_visible = True
+				self.tab_widget.setTabEnabled(tab_index, any_visible)
+				scroll_widget.setVisible(True)
+				scroll_area.setVisible(True)
 			if self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
 			else:
@@ -513,7 +503,8 @@ class OptionsEditor(QMainWindow):
 					if self.tab_widget.isTabEnabled(i):
 						self.tab_widget.setCurrentIndex(i)
 						break
-
+			self.show()
+			self.activateWindow()
 		except Exception as e:
 			self.log(f"Error in filter_settings: {str(e)}")
 			self.show()
