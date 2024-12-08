@@ -403,8 +403,14 @@ class OptionsEditor(QMainWindow):
 
 		self.category_filter = QComboBox()
 		self.category_filter.addItem("All Categories")
+
+		categories = set()
 		for section_name in self.options.keys():
-			self.category_filter.addItem(section_name)
+			categories.add(section_name)
+
+		sorted_categories = sorted(list(categories))
+		self.category_filter.addItems(sorted_categories)
+
 		self.category_filter.setFixedWidth(150)
 		self.category_filter.currentTextChanged.connect(self.filter_settings)
 
@@ -413,67 +419,84 @@ class OptionsEditor(QMainWindow):
 		search_layout.addWidget(QLabel("Category:"))
 		search_layout.addWidget(self.category_filter)
 
-
 		self.tab_widget.setCornerWidget(search_widget, Qt.TopRightCorner)
-
 		main_layout.addWidget(self.tab_widget)
 		central_widget.setLayout(main_layout)
 
+		self.show()
+		self.activateWindow()
+
 	def filter_settings(self):
-		search_text = self.search_bar.text().lower()
-		selected_category = self.category_filter.currentText()
+		try:
+			search_text = self.search_bar.text().lower()
+			selected_category = self.category_filter.currentText()
 
-		for tab_index in range(self.tab_widget.count()):
-			tab_name = self.tab_widget.tabText(tab_index)
-			scroll_area = self.tab_widget.widget(tab_index)
+			current_tab = self.tab_widget.currentIndex()
 
-			if selected_category != "All Categories" and selected_category != tab_name:
-				self.tab_widget.setTabEnabled(tab_index, False)
-				continue
+			for tab_index in range(self.tab_widget.count()):
+				tab_name = self.tab_widget.tabText(tab_index)
+				scroll_area = self.tab_widget.widget(tab_index)
 
-			self.tab_widget.setTabEnabled(tab_index, True)
+				if selected_category != "All Categories" and selected_category != tab_name:
+					self.tab_widget.setTabEnabled(tab_index, False)
+					continue
 
-			if isinstance(scroll_area, QScrollArea):
-				scroll_widget = scroll_area.widget()
-				if scroll_widget and scroll_widget.layout():
-					layout = scroll_widget.layout()
-					rows_visible = False
+				self.tab_widget.setTabEnabled(tab_index, True)
 
-					for i in range(layout.rowCount()):
-						show_row = True
-						label_item = layout.itemAtPosition(i, 0)
-						if label_item and label_item.widget():
+				if isinstance(scroll_area, QScrollArea):
+					scroll_widget = scroll_area.widget()
+					if scroll_widget and scroll_widget.layout():
+						layout = scroll_widget.layout()
+						any_visible = False
+
+						for i in range(layout.rowCount()):
+							label_item = layout.itemAtPosition(i, 0)
+							if not label_item or not label_item.widget():
+								continue
+
 							setting_name = label_item.widget().text().lower().rstrip(':')
-							setting_visible = True
+							setting_visible = False
 
-							if search_text:
-								setting_visible = False
-							if search_text in setting_name:
+							if not search_text:
+								setting_visible = True
+							elif search_text in setting_name:
 								setting_visible = True
 							elif setting_name in self.help_texts:
-									help_text = self.help_texts[setting_name].lower()
-									if search_text in help_text:
-										setting_visible = True
+								help_text = self.help_texts[setting_name].lower()
+								if search_text in help_text:
+									setting_visible = True
 							else:
-									value_item = layout.itemAtPosition(i, 1)
-									if value_item and value_item.widget():
-										widget = value_item.widget()
+								value_item = layout.itemAtPosition(i, 1)
+								if value_item and value_item.widget():
+									widget = value_item.widget()
 									if isinstance(widget, QLineEdit):
 										if search_text in widget.text().lower():
-												setting_visible = True
+											setting_visible = True
 									elif isinstance(widget, QComboBox):
 										if search_text in widget.currentText().lower():
-												setting_visible = True
+											setting_visible = True
 
-							show_row = setting_visible
-							rows_visible = rows_visible or show_row
+							for col in range(layout.columnCount()):
+								item = layout.itemAtPosition(i, col)
+								if item and item.widget():
+									item.widget().setVisible(setting_visible)
+									if setting_visible:
+										any_visible = True
 
-						for col in range(layout.columnCount()):
-							item = layout.itemAtPosition(i, col)
-							if item and item.widget():
-								item.widget().setVisible(show_row)
+						self.tab_widget.setTabEnabled(tab_index, any_visible)
 
-					self.tab_widget.setTabEnabled(tab_index, rows_visible)
+			if self.tab_widget.isTabEnabled(current_tab):
+				self.tab_widget.setCurrentIndex(current_tab)
+			else:
+				for i in range(self.tab_widget.count()):
+					if self.tab_widget.isTabEnabled(i):
+						self.tab_widget.setCurrentIndex(i)
+						break
+
+		except Exception as e:
+			self.log(f"Error in filter_settings: {str(e)}")
+			self.show()
+			self.activateWindow()
 
 	def change_game(self):
 		if self.check_unsaved_changes():
