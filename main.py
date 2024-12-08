@@ -423,8 +423,22 @@ class OptionsEditor(QMainWindow):
 		main_layout.addWidget(self.tab_widget)
 		central_widget.setLayout(main_layout)
 
+		self.populate_category_filter()
+
 		self.show()
 		self.activateWindow()
+
+	def populate_category_filter(self):
+		self.category_filter.clear()
+		self.category_filter.addItem("All Categories")
+
+		categories = set()
+		for section_name in self.options.keys():
+			if section_name:
+				categories.add(section_name)
+
+		sorted_categories = sorted(list(categories))
+		self.category_filter.addItems(sorted_categories)
 
 	def filter_settings(self):
 		try:
@@ -450,40 +464,47 @@ class OptionsEditor(QMainWindow):
 						any_visible = False
 
 						for i in range(layout.rowCount()):
+							show_row = False
 							label_item = layout.itemAtPosition(i, 0)
-							if not label_item or not label_item.widget():
-								continue
 
-							setting_name = label_item.widget().text().lower().rstrip(':')
-							setting_visible = False
+							if label_item and label_item.widget():
+								setting_name = label_item.widget().text().lower().rstrip(':')
 
-							if not search_text:
-								setting_visible = True
-							elif search_text in setting_name:
-								setting_visible = True
-							elif setting_name in self.help_texts:
-								help_text = self.help_texts[setting_name].lower()
-								if search_text in help_text:
-									setting_visible = True
-							else:
-								value_item = layout.itemAtPosition(i, 1)
-								if value_item and value_item.widget():
-									widget = value_item.widget()
-									if isinstance(widget, QLineEdit):
-										if search_text in widget.text().lower():
-											setting_visible = True
-									elif isinstance(widget, QComboBox):
-										if search_text in widget.currentText().lower():
-											setting_visible = True
+								if not search_text:
+									show_row = True
+								else:
+									if search_text in setting_name:
+										show_row = True
+									elif setting_name in self.help_texts:
+										help_text = self.help_texts[setting_name].lower()
+										if search_text in help_text:
+											show_row = True
+									else:
+										value_item = layout.itemAtPosition(i, 1)
+										if value_item and value_item.widget():
+											widget = value_item.widget()
+											if isinstance(widget, QLineEdit):
+												if search_text in widget.text().lower():
+													show_row = True
+											elif isinstance(widget, QComboBox):
+												if search_text in widget.currentText().lower():
+													show_row = True
+											elif isinstance(widget, QCheckBox):
+												if search_text in str(widget.isChecked()).lower():
+													show_row = True
 
-							for col in range(layout.columnCount()):
-								item = layout.itemAtPosition(i, col)
-								if item and item.widget():
-									item.widget().setVisible(setting_visible)
-									if setting_visible:
-										any_visible = True
+								for col in range(layout.columnCount()):
+									item = layout.itemAtPosition(i, col)
+									if item and item.widget():
+										item.widget().setVisible(show_row)
+										if show_row:
+											any_visible = True
 
 						self.tab_widget.setTabEnabled(tab_index, any_visible)
+						if not any_visible:
+							self.tab_widget.setTabVisible(tab_index, False)
+						else:
+							self.tab_widget.setTabVisible(tab_index, True)
 
 			if self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
@@ -766,15 +787,18 @@ class OptionsEditor(QMainWindow):
 	def display_options(self):
 		self.tab_widget.clear()
 		self.widgets.clear()
+
 		if not hasattr(self, 'search_bar'):
 			search_layout = self.create_search_widgets()
 			self.layout().insertLayout(0, search_layout)
+
 		for section, data in self.options.items():
 			scroll_area = QScrollArea()
 			scroll_widget = QWidget()
 			scroll_layout = QGridLayout()
 			scroll_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 			scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
 			for i, setting in enumerate(data["settings"]):
 				label = QLabel(f"{setting['name']}:")
 				scroll_layout.addWidget(label, i, 0)
@@ -814,6 +838,8 @@ class OptionsEditor(QMainWindow):
 			scroll_area.setWidget(scroll_widget)
 			scroll_area.setWidgetResizable(True)
 			self.tab_widget.addTab(scroll_area, section)
+
+		self.populate_category_filter()
 		self.update_widget_states()
 
 	def create_widget(self, setting, value):
