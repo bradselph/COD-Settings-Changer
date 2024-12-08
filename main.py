@@ -544,19 +544,6 @@ class OptionsEditor(QMainWindow):
 		else:
 			self.log_window.close()
 
-	# def show_log_window(self):
-	# 	if not self.log_window.isVisible():
-	# 		if self.log_window_detached:
-	# 			self.log_window = LogWindow(self)
-	# 			self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-	# 			self.log_window.topLevelChanged.connect(self.on_log_window_detached)
-	# 			self.log_window_detached = False
-	# 		self.log_window.show()
-	# 	elif self.log_window_detached:
-	# 		self.log_window.setFloating(False)
-	# 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-	# 		self.log_window_detached = False
-
 	def hide_log_window(self):
 		self.log_window.close()
 
