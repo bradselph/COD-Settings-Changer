@@ -33,11 +33,11 @@ class GameSelector(QDialog):
 		self.mw2_button.clicked.connect(lambda: self.select_game("MW2 2022"))
 		layout.addWidget(self.mw2_button)
 
-		self.mw3_button = QPushButton("MW3 2023/Warzone 2023")
+		self.mw3_button = QPushButton("MW3 2023")
 		self.mw3_button.clicked.connect(lambda: self.select_game("MW3 2023"))
 		layout.addWidget(self.mw3_button)
 
-		self.bo6_button = QPushButton("BO6 2024 *Warzone 2024")
+		self.bo6_button = QPushButton("BO6 2024/Warzone 2024")
 		self.bo6_button.clicked.connect(lambda: self.select_game("BO6 2024"))
 		layout.addWidget(self.bo6_button)
 
@@ -333,14 +333,14 @@ class OptionsEditor(QMainWindow):
 		about_text = """
 		<div style='text-align: center;'>
 			<h2>Call of Duty Options Editor</h2>
-			<p><b>Version: 1.1</b></p>
+			<p><b>Version: 1.2</b></p>
 			<p style='color: #FF4444;'><b>This application is FREE and costs $0.<br>
 			If you paid for this app, you got scammed.</b></p>
 			<p>This application is designed to edit options for Call of Duty games:</p>
 			<ul style='list-style-type: none;'>
 				<li>- Modern Warfare 2 2022</li>
-				<li>- Modern Warfare 3/Warzone 2023</li>
-				<li>- Black Ops 6/Warzone* 2024 "*Once game fully transitions over"</li>
+				<li>- Modern Warfare 3 2023</li>
+				<li>- Black Ops 6/Warzone 2024</li>
 			</ul>
 			<p style='color: #666;'><i>DISCLAIMER: This application and its developer are not in any way,<br>
 			shape, or form tied to or related with Activision, the publisher of Call of Duty games.</i></p>
@@ -389,28 +389,23 @@ class OptionsEditor(QMainWindow):
 	def create_widgets(self):
 		central_widget = QWidget()
 		self.setCentralWidget(central_widget)
-		layout = QVBoxLayout()
+		main_layout = QVBoxLayout()
 
-		# search widgets at the top
-		search_layout = self.create_search_widgets()
-		layout.addLayout(search_layout)
-
-		# tab widgets at the bottom
-		layout.addWidget(self.tab_widget)
-		central_widget.setLayout(layout)
-
-	def create_search_widgets(self):
-		search_layout = QHBoxLayout()
+		search_widget = QWidget()
+		search_layout = QHBoxLayout(search_widget)
+		search_layout.setContentsMargins(0, 0, 10, 0)
 
 		self.search_bar = QLineEdit()
 		self.search_bar.setPlaceholderText("Search settings...")
 		self.search_bar.setClearButtonEnabled(True)
+		self.search_bar.setFixedWidth(200)
 		self.search_bar.textChanged.connect(self.filter_settings)
 
 		self.category_filter = QComboBox()
 		self.category_filter.addItem("All Categories")
 		for section_name in self.options.keys():
 			self.category_filter.addItem(section_name)
+		self.category_filter.setFixedWidth(150)
 		self.category_filter.currentTextChanged.connect(self.filter_settings)
 
 		search_layout.addWidget(QLabel("Search:"))
@@ -418,7 +413,11 @@ class OptionsEditor(QMainWindow):
 		search_layout.addWidget(QLabel("Category:"))
 		search_layout.addWidget(self.category_filter)
 
-		return search_layout
+
+		self.tab_widget.setCornerWidget(search_widget, Qt.TopRightCorner)
+
+		main_layout.addWidget(self.tab_widget)
+		central_widget.setLayout(main_layout)
 
 	def filter_settings(self):
 		search_text = self.search_bar.text().lower()
@@ -449,21 +448,21 @@ class OptionsEditor(QMainWindow):
 
 							if search_text:
 								setting_visible = False
-								if search_text in setting_name:
-									setting_visible = True
-								elif setting_name in self.help_texts:
+							if search_text in setting_name:
+								setting_visible = True
+							elif setting_name in self.help_texts:
 									help_text = self.help_texts[setting_name].lower()
 									if search_text in help_text:
 										setting_visible = True
-								else:
+							else:
 									value_item = layout.itemAtPosition(i, 1)
 									if value_item and value_item.widget():
 										widget = value_item.widget()
-										if isinstance(widget, QLineEdit):
-											if search_text in widget.text().lower():
+									if isinstance(widget, QLineEdit):
+										if search_text in widget.text().lower():
 												setting_visible = True
-										elif isinstance(widget, QComboBox):
-											if search_text in widget.currentText().lower():
+									elif isinstance(widget, QComboBox):
+										if search_text in widget.currentText().lower():
 												setting_visible = True
 
 							show_row = setting_visible
@@ -510,18 +509,18 @@ class OptionsEditor(QMainWindow):
 		else:
 			self.log_window.close()
 
-	def show_log_window(self):
-		if not self.log_window.isVisible():
-			if self.log_window_detached:
-				self.log_window = LogWindow(self)
-				self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-				self.log_window.topLevelChanged.connect(self.on_log_window_detached)
-				self.log_window_detached = False
-			self.log_window.show()
-		elif self.log_window_detached:
-			self.log_window.setFloating(False)
-			self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
-			self.log_window_detached = False
+	# def show_log_window(self):
+	# 	if not self.log_window.isVisible():
+	# 		if self.log_window_detached:
+	# 			self.log_window = LogWindow(self)
+	# 			self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+	# 			self.log_window.topLevelChanged.connect(self.on_log_window_detached)
+	# 			self.log_window_detached = False
+	# 		self.log_window.show()
+	# 	elif self.log_window_detached:
+	# 		self.log_window.setFloating(False)
+	# 		self.addDockWidget(Qt.BottomDockWidgetArea, self.log_window)
+	# 		self.log_window_detached = False
 
 	def hide_log_window(self):
 		self.log_window.close()
@@ -621,7 +620,6 @@ class OptionsEditor(QMainWindow):
 		return None
 
 	def find_player_folders(self, base_path):
-		"""Scan for all possible player folders"""
 		player_folders = []
 		try:
 			if os.path.exists(os.path.join(base_path, "players")):
@@ -681,7 +679,6 @@ class OptionsEditor(QMainWindow):
 		self.setup_message_box(msg_box).exec_()
 
 	def validate_file_format(self, file_path):
-		"""Validate file format matches game type"""
 		if self.game == "BO6 2024" and not file_path.lower().endswith('.txt'):
 			return False
 		elif self.game != "BO6 2024" and not file_path.lower().endswith('.cst'):
