@@ -2,15 +2,14 @@ import os
 import re
 import stat
 import sys
-
+from qt_material import apply_stylesheet
 from PyQt5.QtCore import QSettings, Qt, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
 							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
-							 QHBoxLayout, QSizePolicy)
-
+							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup)
 from help_texts import get_help_texts
 
 
@@ -20,7 +19,18 @@ class GameSelector(QDialog):
 		self.setWindowTitle("Select Game")
 		self.setFixedSize(300, 200)
 
+		if parent and hasattr(parent, 'app'):
+			self.app = parent.app
+		else:
+			self.app = QApplication.instance()
+
 		settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+		theme = settings.value("theme", "dark_blue", type=str)
+		try:
+			apply_stylesheet(self.app, theme=theme)
+		except Exception as e:
+			print(f"Error applying theme to GameSelector: {str(e)}")
+
 		if not settings.value("app_launched", False, type=bool):
 			self.show_first_time_warning()
 			settings.setValue("app_launched", True)
@@ -151,6 +161,7 @@ class NoScrollComboBox(QComboBox):
 class OptionsEditor(QMainWindow):
 	def __init__(self):
 		super().__init__()
+		self.app = QApplication.instance()
 		self.setWindowTitle("Call of Duty Options Editor")
 		self.setGeometry(100, 100, 1000, 600)
 		self.show_log_action = QAction("Show Log", self, checkable=True)
@@ -229,6 +240,62 @@ class OptionsEditor(QMainWindow):
 
 		self.select_game()
 
+	def setup_theme(self):
+		settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+		theme = settings.value("theme", "dark_blue.xml", type=str)
+		self.apply_theme(theme)
+
+	def apply_theme(self, theme_name):
+		try:
+			apply_stylesheet(self.app, theme=theme_name)
+			settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+			settings.setValue("theme", theme_name)
+
+			status_bar = self.statusBar()
+			status_bar.showMessage(f"Theme: {theme_name.replace('_', ' ').title()}")
+		except Exception as e:
+			self.log(f"Error applying theme: {str(e)}")
+
+	def create_theme_menu(self):
+		theme_menu = QMenu("Theme", self)
+		themes = [
+			"dark_blue.xml",
+			"dark_amber.xml",
+			"dark_cyan.xml",
+			"dark_lightgreen.xml",
+			"dark_pink.xml",
+			"dark_purple.xml",
+			"dark_red.xml",
+			"dark_teal.xml",
+			"dark_yellow.xml",
+			"light_blue.xml",
+			"light_amber.xml",
+			"light_cyan.xml",
+			"light_cyan_500.xml",
+			"light_lightgreen.xml",
+			"light_pink.xml",
+			"light_purple.xml",
+			"light_red.xml",
+			"light_teal.xml",
+			"light_yellow.xml"
+		]
+
+		theme_group = QActionGroup(self)
+		theme_group.setExclusive(True)
+
+		settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+		current_theme = settings.value("theme", "dark_blue.xml", type=str)
+
+		for theme in themes:
+			display_name = theme.replace(".xml", "").replace("_", " ").title()
+			action = QAction(display_name, self, checkable=True)
+			action.setChecked(theme == current_theme)
+			action.triggered.connect(lambda checked, t=theme: self.apply_theme(t))
+			theme_group.addAction(action)
+			theme_menu.addAction(action)
+
+		return theme_menu
+
 	def setup_message_box(self, msg_box):
 		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
 		return msg_box
@@ -303,6 +370,7 @@ class OptionsEditor(QMainWindow):
 
 		options_menu = menu_bar.addMenu("Options")
 		options_menu.addAction(self.read_only_action)
+		options_menu.addMenu(self.create_theme_menu())
 		clear_settings_action = QAction("Clear All Settings", self)
 		clear_settings_action.triggered.connect(self.clear_all_settings)
 		options_menu.addAction(clear_settings_action)
@@ -310,7 +378,6 @@ class OptionsEditor(QMainWindow):
 		help_menu = menu_bar.addMenu("Help")
 		help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
 		help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
-
 	def show_first_time_warning(self):
 		warning_text = (
 				"<h3 style='color: #FF4444; text-align: center;'>WARNING: Advanced Application</h3>"
@@ -356,29 +423,40 @@ class OptionsEditor(QMainWindow):
 		about_dialog.setText(about_text)
 		about_dialog.setTextFormat(Qt.RichText)
 		about_dialog.setIcon(QMessageBox.Information)
+
+		settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+		theme = settings.value("theme", "dark_blue.xml", type=str)
+		try:
+			apply_stylesheet(self.app, theme=theme)
+		except Exception as e:
+			print(f"Error applying theme to GameSelector: {str(e)}")
+
 		self.setup_message_box(about_dialog).exec_()
+
 
 	def clear_all_settings(self):
 		reply = QMessageBox.question(self, 'Clear Settings',
-									 "Are you sure you want to clear all settings? "
-									 "This will reset the application to its initial state.",
-									 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+									"Are you sure you want to clear all settings? "
+									"This will reset the application to its initial state.",
+									QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
 		if reply == QMessageBox.Yes:
 			settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+			current_theme = settings.value("theme", "dark_blue", type=str)
 			settings.clear()
+			settings.setValue("theme", current_theme)
 			settings.sync()
 
 			QMessageBox.information(self, "Settings Cleared",
-									"All settings have been cleared. "
-									"The application will now close. "
-									"The next launch will be like a fresh install.")
-
+								  "All settings have been cleared. "
+								  "The application will now close. "
+								  "The next launch will be like a fresh install.")
 			self.close()
 
 	def closeEvent(self, event):
 		if self.check_unsaved_changes():
 			settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
+			settings.sync()
 			if not settings.contains("app_launched"):
 				event.accept()
 			else:
@@ -425,6 +503,7 @@ class OptionsEditor(QMainWindow):
 
 		self.populate_category_filter()
 
+		self.setup_theme()
 		self.show()
 		self.activateWindow()
 
@@ -817,9 +896,21 @@ class OptionsEditor(QMainWindow):
 			scroll_area.setWidgetResizable(True)
 			self.tab_widget.addTab(scroll_area, section)
 
+		for section, data in self.options.items():
+			for setting in data["settings"]:
+				widget_key = f"{section}_{setting['name']}"
+				if widget_key in self.widgets:
+					widget_data = self.widgets[widget_key]
+					if "widget" in widget_data:
+						if isinstance(widget_data["widget"], QLineEdit):
+							if not widget_data["widget"].isEnabled():
+								widget_data["widget"].setStyleSheet("QLineEdit:disabled { color: gray; }")
+					elif "slider" in widget_data and "value_label" in widget_data:
+						if not widget_data["slider"].isEnabled():
+							widget_data["value_label"].setStyleSheet("QLineEdit:disabled { color: gray; }")
+
 		self.populate_category_filter()
 		self.update_widget_states()
-
 	def create_widget(self, setting, value):
 		if setting['name'] in self.non_editable_fields:
 			widget = QLineEdit(value)
@@ -1097,19 +1188,18 @@ def main():
 	except Exception as e:
 		print(f"Unhandled exception in main: {str(e)}")
 		QMessageBox.critical(
-				None,
-				"Critical Error",
-				f"""
-				<div style='text-align: center;'>
-					<h3 style='color: #FF4444;'>Critical Error</h3>
-					<p>An unhandled error occurred:</p>
-					<p><b>{str(e)}</b></p>
-				</div>
-				""",
-				QMessageBox.Ok
+			None,
+			"Critical Error",
+			f"""
+			<div style='text-align: center;'>
+				<h3 style='color: #FF4444;'>Critical Error</h3>
+				<p>An unhandled error occurred:</p>
+				<p><b>{str(e)}</b></p>
+			</div>
+			""",
+			QMessageBox.Ok
 		)
 		sys.exit(1)
-
 
 if __name__ == "__main__":
 	main()
