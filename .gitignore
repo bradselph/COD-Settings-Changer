@@ -19,3 +19,6 @@ COD-Settings-Changer.spec
 README-ANALYZER.txt
 /venv
 __pycache__/build.cpython-312.pyc
+/examples
+/examples/players
+/examples/players/76561199634814394
