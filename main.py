@@ -260,7 +260,6 @@ class OptionsEditor(QMainWindow):
 		theme_menu = QMenu("Theme", self)
 		themes = [
 			"dark_blue.xml",
-			"dark_amber.xml",
 			"dark_cyan.xml",
 			"dark_lightgreen.xml",
 			"dark_pink.xml",
@@ -400,7 +399,7 @@ class OptionsEditor(QMainWindow):
 		about_text = """
 		<div style='text-align: center;'>
 			<h2>Call of Duty Options Editor</h2>
-			<p><b>Version: 1.2</b></p>
+			<p><b>Version: 1.3</b></p>
 			<p style='color: #FF4444;'><b>This application is FREE and costs $0.<br>
 			If you paid for this app, you got scammed.</b></p>
 			<p>This application is designed to edit options for Call of Duty games:</p>
@@ -415,6 +414,7 @@ class OptionsEditor(QMainWindow):
 			<ul style='list-style-type: none;'>
 				<li>- PyQt5 (GPL v3)</li>
 				<li>- Python (PSF License)</li>
+				<li>- Qt-Material (BSD-2-Clause License)</li>
 			</ul>
 		</div>
 		"""
@@ -432,7 +432,6 @@ class OptionsEditor(QMainWindow):
 			print(f"Error applying theme to GameSelector: {str(e)}")
 
 		self.setup_message_box(about_dialog).exec_()
-
 
 	def clear_all_settings(self):
 		reply = QMessageBox.question(self, 'Clear Settings',
