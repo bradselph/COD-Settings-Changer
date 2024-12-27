@@ -527,10 +527,11 @@ class OptionsEditor(QMainWindow):
 			highlight_color = "rgba(45, 140, 255, 0.3)"
 			normal_color = "none"
 
+			matching_positions = []
+
 			for tab_index in range(self.tab_widget.count()):
 				tab = self.tab_widget.widget(tab_index)
 				tab_name = self.tab_widget.tabText(tab_index)
-
 
 				if selected_category != "All Categories" and selected_category != tab_name:
 					self.tab_widget.setTabEnabled(tab_index, False)
@@ -582,6 +583,9 @@ class OptionsEditor(QMainWindow):
 										if search_text in str(widget.isChecked()).lower():
 											should_highlight = True
 
+						if should_highlight:
+							matching_positions.append((tab_index, row))
+
 					style = f"QWidget {{ background: {highlight_color if should_highlight else normal_color}; }}"
 					for widget in row_widgets:
 						current_style = widget.styleSheet()
@@ -599,7 +603,20 @@ class OptionsEditor(QMainWindow):
 				content_widget.setVisible(True)
 				self.tab_widget.setTabEnabled(tab_index, has_matches or not search_text)
 
-			if self.tab_widget.isTabEnabled(current_tab):
+
+			if matching_positions and len(matching_positions) <= 3:
+				tab_index, row = matching_positions[0]
+				self.tab_widget.setCurrentIndex(tab_index)
+				scroll_area = self.tab_widget.widget(tab_index)
+				if isinstance(scroll_area, QScrollArea):
+					content_widget = scroll_area.widget()
+					if content_widget:
+
+						item = content_widget.layout().itemAtPosition(row, 0)
+						if item and item.widget():
+							scroll_area.ensureWidgetVisible(item.widget())
+
+			elif self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
 			else:
 				for i in range(self.tab_widget.count()):
