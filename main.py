@@ -523,57 +523,82 @@ class OptionsEditor(QMainWindow):
 			search_text = self.search_bar.text().lower()
 			selected_category = self.category_filter.currentText()
 			current_tab = self.tab_widget.currentIndex()
+
+			highlight_color = "rgba(45, 140, 255, 0.3)"
+			normal_color = "none"
+
 			for tab_index in range(self.tab_widget.count()):
+				tab = self.tab_widget.widget(tab_index)
 				tab_name = self.tab_widget.tabText(tab_index)
-				scroll_area = self.tab_widget.widget(tab_index)
+
+
 				if selected_category != "All Categories" and selected_category != tab_name:
 					self.tab_widget.setTabEnabled(tab_index, False)
 					continue
+
 				self.tab_widget.setTabEnabled(tab_index, True)
-				if not isinstance(scroll_area, QScrollArea):
+				if not isinstance(tab, QScrollArea):
 					continue
-				scroll_widget = scroll_area.widget()
-				if not scroll_widget or not scroll_widget.layout():
+
+				content_widget = tab.widget()
+				if not content_widget or not content_widget.layout():
 					continue
-				layout = scroll_widget.layout()
-				any_visible = False
-				for i in range(layout.rowCount()):
-					label_item = layout.itemAtPosition(i, 0)
-					if not label_item or not label_item.widget():
-						continue
-					setting_name = label_item.widget().text().lower().rstrip(':')
-					show_row = False
-					if not search_text:
-						show_row = True
-					else:
-						if search_text in setting_name:
-							show_row = True
-						elif setting_name in self.help_texts:
-							help_text = self.help_texts[setting_name].lower()
-							if search_text in help_text:
-								show_row = True
-						else:
-							value_item = layout.itemAtPosition(i, 1)
-							if value_item and value_item.widget():
-								widget = value_item.widget()
-								if isinstance(widget, QLineEdit):
-									if search_text in widget.text().lower():
-										show_row = True
-								elif isinstance(widget, QComboBox):
-									if search_text in widget.currentText().lower():
-										show_row = True
-								elif isinstance(widget, QCheckBox):
-									if search_text in str(widget.isChecked()).lower():
-										show_row = True
-					for col in range(layout.columnCount()):
-						item = layout.itemAtPosition(i, col)
+
+				grid = content_widget.layout()
+				has_matches = False
+
+				for row in range(grid.rowCount()):
+					row_widgets = []
+					for col in range(grid.columnCount()):
+						item = grid.itemAtPosition(row, col)
 						if item and item.widget():
-							item.widget().setVisible(show_row)
-							if show_row:
-								any_visible = True
-				self.tab_widget.setTabEnabled(tab_index, any_visible)
-				scroll_widget.setVisible(True)
-				scroll_area.setVisible(True)
+							row_widgets.append(item.widget())
+							item.widget().setVisible(True)
+
+					if not row_widgets:
+						continue
+
+					should_highlight = False
+					label_widget = grid.itemAtPosition(row, 0)
+					if label_widget and label_widget.widget():
+						setting_name = label_widget.widget().text().lower().strip(':')
+
+						if search_text:
+							if search_text in setting_name:
+								should_highlight = True
+							elif setting_name in self.help_texts and search_text in self.help_texts[setting_name].lower():
+								should_highlight = True
+							else:
+								value_widget = grid.itemAtPosition(row, 1)
+								if value_widget and value_widget.widget():
+									widget = value_widget.widget()
+									if isinstance(widget, QLineEdit):
+										if search_text in widget.text().lower():
+											should_highlight = True
+									elif isinstance(widget, QComboBox):
+										if search_text in widget.currentText().lower():
+											should_highlight = True
+									elif isinstance(widget, QCheckBox):
+										if search_text in str(widget.isChecked()).lower():
+											should_highlight = True
+
+					style = f"QWidget {{ background: {highlight_color if should_highlight else normal_color}; }}"
+					for widget in row_widgets:
+						current_style = widget.styleSheet()
+						if should_highlight:
+							if not current_style:
+								widget.setStyleSheet(style)
+							else:
+								widget.setStyleSheet(current_style + style)
+						else:
+							widget.setStyleSheet(current_style.replace(f"background: {highlight_color};", ""))
+
+					if should_highlight:
+						has_matches = True
+
+				content_widget.setVisible(True)
+				self.tab_widget.setTabEnabled(tab_index, has_matches or not search_text)
+
 			if self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
 			else:
@@ -581,12 +606,9 @@ class OptionsEditor(QMainWindow):
 					if self.tab_widget.isTabEnabled(i):
 						self.tab_widget.setCurrentIndex(i)
 						break
-			self.show()
-			self.activateWindow()
+
 		except Exception as e:
 			self.log(f"Error in filter_settings: {str(e)}")
-			self.show()
-			self.activateWindow()
 
 	def change_game(self):
 		if self.check_unsaved_changes():
