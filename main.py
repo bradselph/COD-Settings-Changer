@@ -475,6 +475,7 @@ class OptionsEditor(QMainWindow):
 
 		advanced_menu = menu_bar.addMenu("Advanced")
 		advanced_menu.addAction(QAction("Controller Settings (Binary)...", self, triggered=self.show_binary_settings))
+		advanced_menu.addAction(QAction("View Config dvars (.cfg)...", self, triggered=self.show_cfg_dvars))
 
 		help_menu = menu_bar.addMenu("Help")
 		help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
@@ -538,6 +539,58 @@ class OptionsEditor(QMainWindow):
 		btn.clicked.connect(dlg.accept)
 		lay.addWidget(btn)
 		self.log('Viewed binary controller settings: %d found (crc_ok=%s)' % (len(rows), crc_ok))
+		dlg.exec_()
+
+	def show_cfg_dvars(self):
+		'View decoded hashed dvar config files. Names come from the bundled dvar hash dump.'
+		try:
+			import cfg_decoder
+		except Exception as e:
+			self.show_error_message('Config dvars', 'Decoder unavailable: ' + str(e))
+			return
+		paths = cfg_decoder.find_cfgs()
+		if not paths:
+			p, _ = QFileDialog.getOpenFileName(self, 'Select a config .cfg file', '', 'Config (*.cfg);;All Files (*)')
+			if not p:
+				return
+			paths = [p]
+		best = None
+		for p in paths:
+			try:
+				rows, st = cfg_decoder.decode_cfg(p)
+			except Exception:
+				continue
+			if best is None or st['named'] > best[2]['named']:
+				best = (p, rows, st)
+		if not best:
+			self.show_error_message('Config dvars', 'No decodable config found.')
+			return
+		p, rows, st = best
+		dlg = QDialog(self)
+		dlg.setWindowTitle('Config dvars (.cfg)')
+		dlg.resize(640, 560)
+		lay = QVBoxLayout(dlg)
+		lay.addWidget(QLabel('<p>Decoded from <b>' + os.path.basename(p) + '</b> -- ' + str(st['named']) + ' of ' + str(st['total']) + ' dvars named from the hash dump. These are gameplay/console dvars, separate from the settings tabs.</p>'))
+		scroll = QScrollArea()
+		scroll.setWidgetResizable(True)
+		content = QWidget()
+		grid = QGridLayout(content)
+		grid.addWidget(QLabel('<b>Dvar</b>'), 0, 0)
+		grid.addWidget(QLabel('<b>Value</b>'), 0, 1)
+		for i, r in enumerate(rows, 1):
+			lbl = QLabel(r['key'])
+			if not r['named']:
+				lbl.setStyleSheet('color: gray;')
+			grid.addWidget(lbl, i, 0)
+			grid.addWidget(QLabel(str(r['value'])), i, 1)
+		content.setLayout(grid)
+		scroll.setWidget(content)
+		lay.addWidget(scroll)
+		lay.addWidget(QLabel('<i>Read-only. Grey = hashed dvar not in the name dump.</i>'))
+		btn = QPushButton('Close')
+		btn.clicked.connect(dlg.accept)
+		lay.addWidget(btn)
+		self.log('Viewed config dvars: %d/%d named from %s' % (st['named'], st['total'], os.path.basename(p)))
 		dlg.exec_()
 
 	def show_about_dialog(self):

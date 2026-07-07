@@ -140,6 +140,19 @@ Hover over any setting to see:
 - Applied changes are marked unsaved; use `File > Save Options` to write them (both `.txt0`/`.txt1`
   buffers are written for BO6/BO7).
 
+### Advanced viewers (binary & config)
+The **Advanced** menu exposes settings that are not stored in the plaintext config:
+- **Controller Settings (Binary)** — decodes the binary `.csb` (MWII) / BO7 profile blob:
+  stick deadzones, stick sensitivity, aim response, and movement/interaction behaviors, with
+  friendly names for the identified settings. Read-only.
+- **View Config dvars (.cfg)** — decodes hashed `config*.cfg` gameplay/console dvars. For MWII
+  the dvar names are recovered from a bundled dvar-hash dump (`dvar_hashes.txt`); MW 2019 uses a
+  different 32-bit id format so those show as ids with readable values. Read-only.
+
+Note: two separate hash namespaces exist — *settings-menu* dvars (the `.csb`/`.cdb` controller
+settings) use custom 32-bit ids that are not in public dumps, while *gameplay/console* dvars
+(`config*.cfg`) use the 64-bit FNV-1a hash that community dumps do cover.
+
 ### Read-only Mode
 - Option to save files as read-only
 - Prevents game from overwriting your settings
