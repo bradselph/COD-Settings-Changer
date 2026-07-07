@@ -315,7 +315,7 @@ class OptionsEditor(QMainWindow):
 			}
 		""")
 
-		self.select_game()
+		self.show_welcome()
 
 	def setup_theme(self):
 		settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
@@ -387,11 +387,26 @@ class OptionsEditor(QMainWindow):
 				self.raise_()
 				self.activateWindow()
 			else:
-				self.log("Game selection cancelled")
-				self.close()
+				self.log('Game selection cancelled - staying on current view')
 		except Exception as e:
 			self.log(f"Error in select_game: {str(e)}")
 			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
+
+	def show_welcome(self):
+		'Idle landing state so the app opens without forcing game/file selection.'
+		settings = QSettings("Lif3Snatcher's", 'CODOptionsEditor')
+		if not settings.value('app_launched', False, type=bool):
+			self.show_first_time_warning()
+			settings.setValue('app_launched', True)
+		self.tab_widget.clear()
+		placeholder = QWidget()
+		lay = QVBoxLayout(placeholder)
+		lbl = QLabel('<h2>Call of Duty Options Editor</h2>'
+					 '<p>Use <b>File &gt; Change Game</b> to load and edit your settings.</p>')
+		lbl.setAlignment(Qt.AlignCenter)
+		lay.addWidget(lbl)
+		self.tab_widget.addTab(placeholder, 'Welcome')
+		self.statusBar().showMessage('No game loaded - use File > Change Game to begin')
 
 	def get_combobox_options(self, setting):
 		return self.setting_options.get(setting["name"], [])
@@ -1025,10 +1040,6 @@ class OptionsEditor(QMainWindow):
 		self.tab_widget.clear()
 		self.widgets.clear()
 
-		if not hasattr(self, 'search_bar'):
-			search_layout = self.create_search_widgets()
-			self.layout().insertLayout(0, search_layout)
-
 		for section, data in self.options.items():
 			scroll_area = QScrollArea()
 			scroll_widget = QWidget()
@@ -1102,8 +1113,9 @@ class OptionsEditor(QMainWindow):
 			widget.setCurrentText(value)
 			widget.currentTextChanged.connect(self.set_unsaved_changes)
 		elif value.lower() in ('true', 'false'):
-			widget = QCheckBox()
+			widget = QCheckBox('On' if value.lower() == 'true' else 'Off')
 			widget.setChecked(value.lower() == 'true')
+			widget.stateChanged.connect(lambda st, w=widget: w.setText('On' if st else 'Off'))
 			widget.stateChanged.connect(self.set_unsaved_changes)
 		elif re.match(r'^-?\d+(\.\d+)?$', value):
 			widget = self.create_slider_widget(setting, value)
