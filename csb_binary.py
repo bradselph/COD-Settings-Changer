@@ -11,7 +11,7 @@ File format (reverse-engineered, 28/28 findings verified):
 The dvar hash is a custom, non-invertible IW-engine FNV variant, so only settings we
 have positively identified carry friendly names; the rest are labelled by their raw id.
 """
-import os, struct, zlib
+import os, re, struct, zlib
 
 CRC_RESIDUE = 0x2144DF1C  # zlib.crc32(whole self-sealing file)
 
@@ -89,6 +89,40 @@ def find_csb():
                 if base.endswith("settings.3.pc.cod22.csb") and "save" in files:
                     return os.path.join(base, "save")
     return None
+
+# ---------------------------------------------------------------------------
+# BO7 / cod25 (Treyarch) profile binary: same length-prefixed enum pool as the
+# MWII .csb, but a different container (no trailing CRC self-seal). Read-only.
+# ---------------------------------------------------------------------------
+def find_bo7_profile():
+    """Locate BO7's g.p.cod25.1.0.b0 profile binary in Connected Storage, or None."""
+    lad = os.environ.get("LOCALAPPDATA", "")
+    pkgs = os.path.join(lad, "Packages")
+    if not os.path.isdir(pkgs):
+        return None
+    for d in os.listdir(pkgs):
+        if not d.startswith("38985CA0.COREBase"):
+            continue
+        for store in ("wgs", "xgs"):
+            root = os.path.join(pkgs, d, "SystemAppData", store)
+            if not os.path.isdir(root):
+                continue
+            for base, _dirs, files in os.walk(root):
+                if base.endswith("g.p.cod25.1.0.b0") and "save" in files:
+                    return os.path.join(base, "save")
+    return None
+
+def decode_bo7_enums(path):
+    """Extract the length-prefixed enum control/movement/interaction values from BO7's
+    profile binary. Values are self-descriptive; hash->name mapping is not yet available."""
+    data = open(path, "rb").read()
+    vals = []
+    for m in re.finditer(rb"[a-z][a-z0-9_]{2,}", data):
+        o = m.start(); s = m.group().decode("latin1")
+        if o >= 1 and data[o - 1] in (len(s), len(s) + 1):
+            vals.append((o, s))
+    return vals
+
 
 if __name__ == "__main__":
     import sys
