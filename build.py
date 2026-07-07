@@ -6,10 +6,10 @@ import platform
 from pathlib import Path
 
 def check_python_version():
-    if sys.version_info < (3, 12):
-        print("Error: Python 3.12 or higher is required.")
+    if sys.version_info < (3, 14):
+        print("Error: Python 3.14 or higher is required.")
         print(f"Current Python version is {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-        print("Please install Python 3.12 or higher and try again.")
+        print("Please install Python 3.14 or higher and try again.")
         sys.exit(1)
     print(f"Python version {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} detected. Proceeding with build.")
 
