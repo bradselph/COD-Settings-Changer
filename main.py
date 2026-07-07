@@ -896,13 +896,15 @@ class OptionsEditor(QMainWindow):
 			candidates = [filename + "0", filename + "1", filename]
 		else:
 			candidates = [filename]
-		# Some launchers/platforms insert a ".pc" segment (e.g. gamerprofile.pc.0.BASE.cst)
+		# Some launchers/platforms insert a ".pc" segment, and its position varies per title
+		# (gamerprofile.pc.0.BASE.cst vs settings.3.local.pc.cod22.cst) -- try each dot boundary.
 		variants = []
 		for c in candidates:
 			variants.append(c)
-			stem = c.split(".", 1)
-			if len(stem) == 2 and not stem[0].endswith("pc"):
-				variants.append(stem[0] + ".pc." + stem[1])
+			parts = c.split(".")
+			if "pc" not in parts:
+				for i in range(1, len(parts) - 1):
+					variants.append(".".join(parts[:i] + ["pc"] + parts[i:]))
 		candidates = variants
 		for root in roots:
 			search_dirs = [root]
