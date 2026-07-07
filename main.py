@@ -473,6 +473,9 @@ class OptionsEditor(QMainWindow):
 		clear_settings_action.triggered.connect(self.clear_all_settings)
 		options_menu.addAction(clear_settings_action)
 
+		advanced_menu = menu_bar.addMenu("Advanced")
+		advanced_menu.addAction(QAction("Controller Settings (Binary)...", self, triggered=self.show_binary_settings))
+
 		help_menu = menu_bar.addMenu("Help")
 		help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
 		help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
@@ -493,6 +496,49 @@ class OptionsEditor(QMainWindow):
 		warning_dialog.setIcon(QMessageBox.Warning)
 		warning_dialog.setStandardButtons(QMessageBox.Ok)
 		warning_dialog.exec_()
+
+	def show_binary_settings(self):
+		'View controller/advanced settings stored in the binary .csb (not the plaintext config).'
+		try:
+			import csb_binary
+		except Exception as e:
+			self.show_error_message('Controller Settings', 'Binary module unavailable: ' + str(e))
+			return
+		path = csb_binary.find_csb()
+		if not path:
+			path, _ = QFileDialog.getOpenFileName(self, "Select settings.3.pc.cod22.csb (the 'save' file)", '', 'All Files (*)')
+		if not path:
+			return
+		try:
+			rows, crc_ok = csb_binary.decode(path)
+		except Exception as e:
+			self.show_error_message('Controller Settings', 'Could not decode: ' + str(e))
+			return
+		dlg = QDialog(self)
+		dlg.setWindowTitle('Controller / Advanced Settings (binary)')
+		dlg.resize(560, 480)
+		lay = QVBoxLayout(dlg)
+		lay.addWidget(QLabel('<p>These live in the binary <b>.csb</b>, not the plaintext config: deadzones, '
+							 'stick sensitivity, aim response, and movement/interaction behaviors.</p>'
+							 '<p>CRC valid: ' + str(crc_ok) + '</p>'))
+		scroll = QScrollArea()
+		scroll.setWidgetResizable(True)
+		content = QWidget()
+		grid = QGridLayout(content)
+		grid.addWidget(QLabel('<b>Setting</b>'), 0, 0)
+		grid.addWidget(QLabel('<b>Value</b>'), 0, 1)
+		for i, r in enumerate(rows, 1):
+			grid.addWidget(QLabel(r['name']), i, 0)
+			grid.addWidget(QLabel(str(r['value'])), i, 1)
+		content.setLayout(grid)
+		scroll.setWidget(content)
+		lay.addWidget(scroll)
+		lay.addWidget(QLabel('<i>Read-only preview. CRC-safe editing is the next step.</i>'))
+		btn = QPushButton('Close')
+		btn.clicked.connect(dlg.accept)
+		lay.addWidget(btn)
+		self.log('Viewed binary controller settings: %d found (crc_ok=%s)' % (len(rows), crc_ok))
+		dlg.exec_()
 
 	def show_about_dialog(self):
 		about_text = """
