@@ -54,7 +54,8 @@ The Call of Duty Options Editor is a tool designed to help you customize your Ca
 3. You'll be prompted to select the game you want to modify settings for:
    - Modern Warfare 2 2022
    - Modern Warfare 3/Warzone 2023
-   - Black Ops 6/Warzone* 2024 (*Once game fully transitions over)
+   - Black Ops 6/Warzone 2024
+   - Black Ops 7/Warzone 2025
 
 ## Main Interface
 
@@ -64,7 +65,7 @@ The main interface consists of:
 - A log window (can be toggled on/off)
 
 ### Menu Bar
-- **File**: Contains options for loading, saving, reloading options, changing games, and exiting.
+- **File**: Contains options for loading, saving, reloading options, exporting/importing settings, changing games, and exiting.
 - **View**: Allows you to show/hide the log window.
 - **Options**: Includes options to save settings as read-only and clear all settings and even change the visual theme of the application.
 - **Help**: Provides access to the "About" information and the first-time warning.
@@ -81,8 +82,12 @@ The application supports multiple visual themes:
 1. The application will automatically attempt to locate your game files
 2. If files aren't found automatically, you'll be prompted to select two files:
    - For MW2 2022: options.3.cod22.cst and settings.3.local.cod22.cst
-   - For MW3 2023: options.4.cod23.cst and gamerprofile.0.BASE.cst
+   - For MW3 2023: options.4.cod23.cst and gamerprofile.0.BASE.cst (or gamerprofile.pc.0.BASE.cst)
    - For BO6 2024: s.1.0.cod24.txt and g.1.0.l.txt
+   - For BO7 2025: s.1.0.cod25.txt and g.p.cod25.1.0.l.txt
+
+Note: the `.txt` titles (BO6/BO7) store two synchronized copies, `.txt0` and `.txt1`. The editor
+auto-detects the `.txt0` buffer and writes **both** on save so the game can't reload a stale copy.
 
 ### Saving Options
 1. After making changes, go to File > Save Options
@@ -120,6 +125,20 @@ Hover over any setting to see:
 - Can be detached and positioned separately
 - Save log contents for troubleshooting
 
+### Import/Export Settings
+- **Export**: `File > Export Settings...` writes your current (edited) values to a portable
+  `.codsettings` file (JSON), tagged with the source game and profile.
+- **Import**: `File > Import Settings...` applies a `.codsettings` file to the currently loaded
+  game. Settings are matched **by name**, so it works across profiles *and* across games
+  (e.g. player 1 exports from MW2, player 2 imports into MW3 — every shared setting transfers).
+- After import you get a summary (with a "Show Details" list):
+  - **Applied** — valid settings whose value actually changed.
+  - **Unchanged** — matched but already equal (nothing to do).
+  - **Invalid** — out of range / not a valid option for the target game (skipped, not applied).
+  - **Not present** — settings the target game/profile doesn't have.
+- Applied changes are marked unsaved; use `File > Save Options` to write them (both `.txt0`/`.txt1`
+  buffers are written for BO6/BO7).
+
 ### Read-only Mode
 - Option to save files as read-only
 - Prevents game from overwriting your settings
@@ -134,10 +153,11 @@ Hover over any setting to see:
 ## Troubleshooting
 
 ### Common Issues
-- **File Detection**: If files aren't detected automatically, ensure you're looking in:
-  - Default: `~\Documents\Call of Duty\players\`
-  - Steam: `~\Documents\Call of Duty\[Steam ID]\`
-  - Battle.net: `~\Documents\Call of Duty\[Battle.net ID]\`
+- **File Detection**: The editor now searches all known launcher/platform locations automatically:
+  - Steam/Battle.net: `~\Documents\Call of Duty\players\` and `~\Documents\Call of Duty\[Steam/Battle.net ID]\`
+  - Per-title: `~\Documents\Call of Duty MWII\`, `Call of Duty MWIII\`, `Call of Duty Modern Warfare\`
+  - Microsoft Store / Game Pass: `%LOCALAPPDATA%\Activision\Call of Duty\players\[XUID]\` (and per-title variants)
+  - It also looks one folder deep for account (Steam/Battle.net/Xbox XUID) subfolders.
 - **BO6 2024 Files**: Make sure you're selecting .txt files instead of .cst files
 - **Theme Issues**: If theme changes don't apply, try restarting the application
 - **Search Not Working**: Clear the search bar and category filter to reset the view

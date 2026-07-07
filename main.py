@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import stat
@@ -17,7 +18,7 @@ class GameSelector(QDialog):
 	def __init__(self, parent=None):
 		super().__init__(parent)
 		self.setWindowTitle("Select Game")
-		self.setFixedSize(300, 200)
+		self.setFixedSize(320, 260)
 
 		if parent and hasattr(parent, 'app'):
 			self.app = parent.app
@@ -50,6 +51,10 @@ class GameSelector(QDialog):
 		self.bo6_button = QPushButton("BO6 2024/Warzone 2024")
 		self.bo6_button.clicked.connect(lambda: self.select_game("BO6 2024"))
 		layout.addWidget(self.bo6_button)
+
+		self.bo7_button = QPushButton("BO7 2025/Warzone 2025")
+		self.bo7_button.clicked.connect(lambda: self.select_game("BO7 2025"))
+		layout.addWidget(self.bo7_button)
 
 		self.selected_game = None
 		self.setLayout(layout)
@@ -213,6 +218,10 @@ class OptionsEditor(QMainWindow):
 				"BO6 2024": {
 						"game_specific":    "s.1.0.cod24.txt",
 						"profile_specific": "g.1.0.l.txt"
+				},
+				"BO7 2025": {
+						"game_specific":    "s.1.0.cod25.txt",
+						"profile_specific": "g.p.cod25.1.0.l.txt"
 				}
 		}
 
@@ -346,6 +355,10 @@ class OptionsEditor(QMainWindow):
 			return "dropdown"
 		return "string"
 
+	def is_txt_game(self):
+		"""BO6/BO7 store settings as plaintext .txt (double-buffered); earlier titles use .cst."""
+		return self.game in ("BO6 2024", "BO7 2025")
+
 	def log(self, message):
 		if hasattr(self, 'log_window'):
 			self.log_window.log(message)
@@ -358,6 +371,9 @@ class OptionsEditor(QMainWindow):
 		file_menu = menu_bar.addMenu("File")
 		file_menu.addAction(QAction("Load Options", self, triggered=self.load_file))
 		file_menu.addAction(QAction("Save Options", self, triggered=self.save_options))
+		file_menu.addSeparator()
+		file_menu.addAction(QAction("Export Settings...", self, triggered=self.export_settings))
+		file_menu.addAction(QAction("Import Settings...", self, triggered=self.import_settings))
 		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
 		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))
 		file_menu.addSeparator()
@@ -399,7 +415,7 @@ class OptionsEditor(QMainWindow):
 		about_text = """
 		<div style='text-align: center;'>
 			<h2>Call of Duty Options Editor</h2>
-			<p><b>Version: 1.3</b></p>
+			<p><b>Version: 1.4</b></p>
 			<p style='color: #FF4444;'><b>This application is FREE and costs $0.<br>
 			If you paid for this app, you got scammed.</b></p>
 			<p>This application is designed to edit options for Call of Duty games:</p>
@@ -407,6 +423,7 @@ class OptionsEditor(QMainWindow):
 				<li>- Modern Warfare 2 2022</li>
 				<li>- Modern Warfare 3 2023</li>
 				<li>- Black Ops 6/Warzone 2024</li>
+				<li>- Black Ops 7/Warzone 2025</li>
 			</ul>
 			<p style='color: #666;'><i>DISCLAIMER: This application and its developer are not in any way,<br>
 			shape, or form tied to or related with Activision, the publisher of Call of Duty games.</i></p>
@@ -678,25 +695,19 @@ class OptionsEditor(QMainWindow):
 				self.log(f"No file mapping found for {self.game}")
 				return
 
-			files_to_load = {}
-			game_specific_path = os.path.join(default_path, game_files["game_specific"])
-			if not auto or not os.path.exists(game_specific_path):
-				game_specific_path = self.get_file_path("game_specific",
+			search_roots = self.get_search_roots()
+
+			game_specific_path = self.find_config_file(game_files["game_specific"], search_roots)
+			if not auto or not game_specific_path:
+				game_specific_path = game_specific_path or self.get_file_path("game_specific",
 														game_files["game_specific"],
 														default_path)
-			profile_path = None
-			profile_file_found = False
-			for folder in player_folders:
-				profile_path = os.path.join(folder, game_files["profile_specific"])
-				if os.path.exists(profile_path):
-					files_to_load["profile_specific"] = profile_path
-					profile_file_found = True
-					break
 
-			if not profile_file_found:
-				profile_path = self.get_file_path("profile_specific",
-												  game_files["profile_specific"],
-												  player_folders[0] if player_folders else default_path)
+			profile_path = self.find_config_file(game_files["profile_specific"], search_roots)
+			if not auto or not profile_path:
+				profile_path = profile_path or self.get_file_path("profile_specific",
+														game_files["profile_specific"],
+														default_path)
 
 			if game_specific_path and profile_path:
 				self.file_path = game_specific_path
@@ -740,7 +751,7 @@ class OptionsEditor(QMainWindow):
 
 		result = msg_box.exec_()
 		if result == QMessageBox.Ok:
-			if self.game == "BO6 2024":
+			if self.is_txt_game():
 				file_filter = "Text Files (*.txt);;All Files (*)"
 			else:
 				file_filter = "CST Files (*.cst);;All Files (*)"
@@ -779,8 +790,69 @@ class OptionsEditor(QMainWindow):
 			self.log(f"Error scanning for player folders: {str(e)}")
 			return [os.path.join(base_path, "players")]
 
+	def get_search_roots(self):
+		"""Ordered dirs that may hold CoD config, across launchers/platforms:
+		Steam, Battle.net, and Microsoft Store / Game Pass (%LOCALAPPDATA%\\Activision)."""
+		home = os.path.expanduser("~")
+		docs = os.path.join(home, "Documents")
+		lad = os.environ.get("LOCALAPPDATA", os.path.join(home, "AppData", "Local"))
+		bases = [
+			os.path.join(docs, "Call of Duty"),
+			os.path.join(docs, "Call of Duty MWII"),
+			os.path.join(docs, "Call of Duty MWIII"),
+			os.path.join(docs, "Call of Duty Modern Warfare"),
+			os.path.join(lad, "Activision", "Call of Duty"),
+			os.path.join(lad, "Activision", "Call of Duty MWII"),
+			os.path.join(lad, "Activision", "Call of Duty MWIII"),
+		]
+		roots = []
+		for base in bases:
+			players = os.path.join(base, "players")
+			if os.path.isdir(players):
+				roots.append(players)
+				roots.extend(self.find_player_folders(base))
+			elif os.path.isdir(base):
+				roots.append(base)
+		seen, ordered = set(), []
+		for r in roots:
+			if r not in seen:
+				seen.add(r)
+				ordered.append(r)
+		self.log(f"Config search roots: {len(ordered)} location(s)")
+		return ordered
+
+	def find_config_file(self, filename, roots):
+		"""Locate a config file across roots and their immediate sub-folders.
+		Handles the .txt0/.txt1 double-buffer of BO6/BO7 (prefers the .txt0 buffer)."""
+		if filename.endswith(".txt"):
+			candidates = [filename + "0", filename + "1", filename]
+		else:
+			candidates = [filename]
+		# Some launchers/platforms insert a ".pc" segment (e.g. gamerprofile.pc.0.BASE.cst)
+		variants = []
+		for c in candidates:
+			variants.append(c)
+			stem = c.split(".", 1)
+			if len(stem) == 2 and not stem[0].endswith("pc"):
+				variants.append(stem[0] + ".pc." + stem[1])
+		candidates = variants
+		for root in roots:
+			search_dirs = [root]
+			try:
+				search_dirs += [os.path.join(root, d) for d in os.listdir(root)
+								if os.path.isdir(os.path.join(root, d))]
+			except OSError:
+				pass
+			for directory in search_dirs:
+				for name in candidates:
+					path = os.path.join(directory, name)
+					if os.path.exists(path):
+						self.log(f"Found {filename} at {path}")
+						return path
+		return None
+
 	def show_bo6_warning(self):
-		if self.game == "BO6 2024":
+		if self.is_txt_game():
 			message = """
 			<div style='text-align: center;'>
 				<h3 style='color: #FFA500;'>Important Note</h3>
@@ -818,9 +890,9 @@ class OptionsEditor(QMainWindow):
 		self.setup_message_box(msg_box).exec_()
 
 	def validate_file_format(self, file_path):
-		if self.game == "BO6 2024" and not file_path.lower().endswith('.txt'):
+		if self.is_txt_game() and not file_path.lower().endswith('.txt'):
 			return False
-		elif self.game != "BO6 2024" and not file_path.lower().endswith('.cst'):
+		elif not self.is_txt_game() and not file_path.lower().endswith('.cst'):
 			return False
 		return True
 
@@ -835,7 +907,7 @@ class OptionsEditor(QMainWindow):
 			with open(file_path, 'r') as file:
 				content = file.read()
 				if file_type == "GameSpecific":
-					if self.game == "BO6 2024":
+					if self.is_txt_game():
 						sections = re.split(r'//\n// [A-Za-z]+\n', content)[1:]
 						section_names = re.findall(r'//\n// ([A-Za-z]+)\n', content)
 						separator = '@'
@@ -846,7 +918,7 @@ class OptionsEditor(QMainWindow):
 				else:  # GameAgnostic
 					sections = [content]
 					section_names = ["GameAgnostic"]
-					separator = '@' if self.game == "BO6 2024" else ':'
+					separator = '@' if self.is_txt_game() else ':'
 
 				for name, section in zip(section_names, sections):
 					if name not in self.options:
@@ -856,7 +928,7 @@ class OptionsEditor(QMainWindow):
 						if '=' in line and not line.strip().startswith('//'):
 							key, value = line.split('=', 1)
 							if file_type == "GameSpecific":
-								if self.game == "BO6 2024":
+								if self.is_txt_game():
 									key = key.split('@')[0].strip()
 								else:
 									key = key.split(':')[0].strip()
@@ -1069,6 +1141,10 @@ class OptionsEditor(QMainWindow):
 			self.save_file_with_permissions(self.file_path, "GameSpecific")
 			self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
 
+			# Mirror double-buffered .txt files so the game cannot reload a stale buffer
+			self.mirror_double_buffer(self.file_path)
+			self.mirror_double_buffer(self.game_agnostic_file_path)
+
 			# Set files as read-only if checkbox is checked
 			if self.read_only_checkbox.isChecked():
 				os.chmod(self.file_path, 0o444)  # Read-only for user, group, and others
@@ -1085,6 +1161,142 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error args: {e.args}\n"
 			self.show_error_message("Error", error_msg)
 			self.log(error_msg)
+
+	def export_settings(self):
+		'Save the current (edited) settings to a portable .codsettings (JSON) file.'
+		if not self.options:
+			self.show_error_message('Export', 'Load a game first, then export.')
+			return
+		records = []
+		for section, data in self.options.items():
+			for setting in data['settings']:
+				name = setting['name']
+				wd = self.widgets.get(f'{section}_{name}')
+				value = self.get_widget_value(wd) if wd else setting['value']
+				records.append({'name': name, 'value': value, 'file_type': setting['file_type'], 'comment': setting['comment']})
+		payload = {'meta': {'game': self.game, 'app': 'CODOptionsEditor', 'version': '1.4', 'count': len(records)}, 'settings': records}
+		default_name = f"{self.game.replace(' ', '_')}_settings.codsettings"
+		path, _ = QFileDialog.getSaveFileName(self, 'Export Settings', default_name, 'COD Settings (*.codsettings *.json);;All Files (*)')
+		if not path:
+			return
+		try:
+			with open(path, 'w', encoding='utf-8') as f:
+				json.dump(payload, f, indent=2)
+			self.log(f'Exported {len(records)} settings from {self.game} to {path}')
+			QMessageBox.information(self, 'Export Complete', f'Exported {len(records)} settings for {self.game}.')
+		except Exception as e:
+			self.show_error_message('Export Failed', str(e))
+
+	def import_settings(self):
+		'Import settings by name -- works across profiles and across games.'
+		if not self.options:
+			self.show_error_message('Import', 'Load the target game first, then import.')
+			return
+		path, _ = QFileDialog.getOpenFileName(self, 'Import Settings', '', 'COD Settings (*.codsettings *.json);;All Files (*)')
+		if not path:
+			return
+		try:
+			with open(path, 'r', encoding='utf-8') as f:
+				payload = json.load(f)
+		except Exception as e:
+			self.show_error_message('Import Failed', f'Could not read file: {e}')
+			return
+		records = payload.get('settings', [])
+		source_game = payload.get('meta', {}).get('game', 'unknown')
+		index = {}
+		for section, data in self.options.items():
+			for setting in data['settings']:
+				index.setdefault(setting['name'], []).append((section, setting))
+		applied, unchanged, invalid, missing = [], [], [], []
+		for rec in records:
+			name = rec.get('name', '')
+			value = str(rec.get('value', ''))
+			if name not in index:
+				missing.append(name)
+				continue
+			handled = False
+			for section, setting in index[name]:
+				wd = self.widgets.get(f'{section}_{name}')
+				if not wd:
+					continue
+				handled = True
+				if not setting['editable'] or name in self.non_editable_fields:
+					invalid.append((name, value, 'read-only in target'))
+					continue
+				if not self.is_value_valid_for_target(setting, value):
+					invalid.append((name, value, 'out of range / not a valid option'))
+					continue
+				if self.values_equal(self.get_widget_value(wd), value):
+					unchanged.append(name)
+					continue
+				self.set_widget_value(wd, value)
+				applied.append(name)
+			if not handled:
+				missing.append(name)
+		if applied:
+			self.unsaved_changes = True
+		self.show_import_report(source_game, applied, unchanged, invalid, missing)
+
+	def set_widget_value(self, widget_data, value):
+		value = str(value)
+		if 'slider' in widget_data:
+			widget_data['value_label'].setText(value)
+		else:
+			w = widget_data['widget']
+			if isinstance(w, QCheckBox):
+				w.setChecked(value.strip().lower() == 'true')
+			elif isinstance(w, QComboBox):
+				w.setCurrentText(value)
+			elif isinstance(w, QLineEdit):
+				w.setText(value)
+
+	def is_value_valid_for_target(self, setting, value):
+		comment = setting.get('comment', '') or ''
+		current = str(setting.get('value', '')).strip()
+		value = str(value).strip()
+		if current.lower() in ('true', 'false'):
+			return value.lower() in ('true', 'false')
+		if 'one of' in comment:
+			opts = [o.strip() for o in comment.split('one of', 1)[1].strip().strip('[]').split(',')]
+			return value in opts
+		if 'to' in comment and re.search(r'-?\d', comment):
+			return self.is_value_in_range(setting, value)
+		return True
+
+	def values_equal(self, a, b):
+		a, b = str(a).strip(), str(b).strip()
+		try:
+			return abs(float(a) - float(b)) < 1e-9
+		except ValueError:
+			return a.lower() == b.lower()
+
+	def show_import_report(self, source_game, applied, unchanged, invalid, missing):
+		applied = list(dict.fromkeys(applied))
+		unchanged = list(dict.fromkeys(unchanged))
+		missing = list(dict.fromkeys(missing))
+		summary = (f'Imported from: {source_game}  ->  {self.game}\n\n'
+				   f'Applied (changed):   {len(applied)}\n'
+				   f'Unchanged (already equal):   {len(unchanged)}\n'
+				   f'Invalid (skipped):   {len(invalid)}\n'
+				   f'Not present in {self.game}:   {len(missing)}')
+		detail = ''
+		if applied:
+			detail += 'APPLIED (changed):\n  ' + '\n  '.join(applied) + '\n\n'
+		if unchanged:
+			detail += 'UNCHANGED (already equal):\n  ' + '\n  '.join(unchanged) + '\n\n'
+		if invalid:
+			inv = '\n  '.join(f'{n} = {v}  [{why}]' for n, v, why in invalid)
+			detail += 'INVALID (out of range / not valid for this game):\n  ' + inv + '\n\n'
+		if missing:
+			detail += f'NOT IN {self.game} (no matching setting):\n  ' + '\n  '.join(missing) + '\n\n'
+		box = QMessageBox(self)
+		box.setWindowTitle('Import Summary')
+		box.setIcon(QMessageBox.Information if applied else QMessageBox.Warning)
+		box.setText(summary)
+		if detail:
+			box.setDetailedText(detail)
+		self.setup_message_box(box).exec_()
+		self.log(f'Import: {len(applied)} applied, {len(unchanged)} unchanged, {len(invalid)} invalid, {len(missing)} not-in-target (from {source_game})')
 
 	def update_file_permissions(self):
 		if self.read_only_action.isChecked():
@@ -1104,6 +1316,28 @@ class OptionsEditor(QMainWindow):
 		finally:
 			os.chmod(file_path, original_permissions)
 
+	def mirror_double_buffer(self, path):
+		"""BO6/BO7 keep two copies (.txt0/.txt1); write the sibling so the game
+		cannot reload a stale buffer after we edit one."""
+		if not path:
+			return
+		m = re.search(r"\.txt([01])$", path)
+		if not m:
+			return
+		sibling = path[:-1] + ("1" if m.group(1) == "0" else "0")
+		try:
+			if os.path.exists(sibling) and not os.access(sibling, os.W_OK):
+				os.chmod(sibling, stat.S_IWRITE | stat.S_IREAD)
+			with open(path, "r") as src:
+				data = src.read()
+			with open(sibling, "w") as dst:
+				dst.write(data)
+			if self.read_only_checkbox.isChecked():
+				os.chmod(sibling, 0o444)
+			self.log(f"Mirrored double-buffer to {sibling}")
+		except Exception as e:
+			self.log(f"Could not mirror double-buffer {sibling}: {e}")
+
 	def save_file(self, file_path, file_type):
 		try:
 			with open(file_path, 'r') as file:
@@ -1112,7 +1346,7 @@ class OptionsEditor(QMainWindow):
 				if '=' in line and not line.strip().startswith('//'):
 					key = line.split('=', 1)[0].strip()
 					if file_type == "GameSpecific":
-						if self.game == "BO6 2024":
+						if self.is_txt_game():
 							key = key.split('@')[0]
 						else:
 							key = key.split(':')[0]
@@ -1164,7 +1398,7 @@ class OptionsEditor(QMainWindow):
 		return True
 
 	def format_line(self, file_type, line, setting, value):
-		if self.game == "BO6 2024":
+		if self.is_txt_game():
 			separator = "@" if "@" in line else "="
 			before_separator = line.split(separator)[0]
 			if "@" in line:
