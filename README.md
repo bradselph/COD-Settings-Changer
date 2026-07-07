@@ -128,14 +128,15 @@ Hover over any setting to see:
 ### Import/Export Settings
 - **Export**: `File > Export Settings...` writes your current (edited) values to a portable
   `.codsettings` file (JSON), tagged with the source game and profile.
-- **Import**: `File > Import Settings...` applies a `.codsettings` file to the currently loaded
-  game. Settings are matched **by name**, so it works across profiles *and* across games
-  (e.g. player 1 exports from MW2, player 2 imports into MW3 — every shared setting transfers).
-- After import you get a summary (with a "Show Details" list):
-  - **Applied** — valid settings whose value actually changed.
-  - **Unchanged** — matched but already equal (nothing to do).
-  - **Invalid** — out of range / not a valid option for the target game (skipped, not applied).
-  - **Not present** — settings the target game/profile doesn't have.
+- **Import**: `File > Import Settings...` opens an interactive **preview** of a `.codsettings`
+  file against the currently loaded game. Settings are matched **by name**, so it works across
+  profiles *and* across games (e.g. player 1 exports from MW2, player 2 imports into MW3).
+- The preview is a tick-list showing **current → new** with a colour-coded status:
+  - **Changed** (green, checked by default) — valid and different; applied on confirm.
+  - **Unchanged** (grey, locked) — matched but already equal.
+  - **Invalid** (red, locked) — out of range / not a valid option for the target game.
+  - **Not present** — settings the target game/profile doesn't have (counted, not listed).
+  Use *Select all changeable* / *Deselect all*, then **Apply Selected** (or Cancel).
 - Applied changes are marked unsaved; use `File > Save Options` to write them (both `.txt0`/`.txt1`
   buffers are written for BO6/BO7).
 

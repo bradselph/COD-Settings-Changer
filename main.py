@@ -163,6 +163,74 @@ class NoScrollComboBox(QComboBox):
 	def wheelEvent(self, event):
 		event.ignore()
 
+class ImportPreviewDialog(QDialog):
+	def __init__(self, rows, source_game, target_game, missing_count, parent=None):
+		super().__init__(parent)
+		self.setWindowTitle('Import Preview')
+		self.resize(760, 540)
+		self.rows = rows
+		self.checks = []
+		layout = QVBoxLayout(self)
+		header = QLabel(f'Transfer from {source_game}  ->  {target_game}     ({len(rows)} matched, {missing_count} not in target)')
+		layout.addWidget(header)
+		top = QHBoxLayout()
+		select_all = QPushButton('Select all changeable')
+		select_none = QPushButton('Deselect all')
+		select_all.clicked.connect(lambda: self.set_all(True))
+		select_none.clicked.connect(lambda: self.set_all(False))
+		top.addWidget(select_all)
+		top.addWidget(select_none)
+		top.addStretch()
+		layout.addLayout(top)
+		scroll = QScrollArea()
+		scroll.setWidgetResizable(True)
+		content = QWidget()
+		grid = QGridLayout(content)
+		for col, title in enumerate(('Apply', 'Setting', 'Current', 'New', 'Status')):
+			grid.addWidget(QLabel(f'<b>{title}</b>'), 0, col)
+		for i, row in enumerate(rows, start=1):
+			name, current, new, status, reason, wd = row
+			cb = QCheckBox()
+			if status == 'changed':
+				cb.setChecked(True)
+			else:
+				cb.setChecked(False)
+				cb.setEnabled(False)
+			self.checks.append(cb)
+			grid.addWidget(cb, i, 0)
+			grid.addWidget(QLabel(str(name)), i, 1)
+			grid.addWidget(QLabel(str(current)), i, 2)
+			grid.addWidget(QLabel(str(new)), i, 3)
+			status_label = QLabel('invalid: ' + reason if status == 'invalid' else status)
+			if status == 'invalid':
+				status_label.setStyleSheet('color: #d9534f;')
+			elif status == 'unchanged':
+				status_label.setStyleSheet('color: gray;')
+			elif status == 'changed':
+				status_label.setStyleSheet('color: #5cb85c;')
+			grid.addWidget(status_label, i, 4)
+		content.setLayout(grid)
+		scroll.setWidget(content)
+		layout.addWidget(scroll)
+		buttons = QHBoxLayout()
+		apply_btn = QPushButton('Apply Selected')
+		cancel_btn = QPushButton('Cancel')
+		apply_btn.clicked.connect(self.accept)
+		cancel_btn.clicked.connect(self.reject)
+		buttons.addStretch()
+		buttons.addWidget(apply_btn)
+		buttons.addWidget(cancel_btn)
+		layout.addLayout(buttons)
+
+	def set_all(self, state):
+		for cb, row in zip(self.checks, self.rows):
+			if row[3] == 'changed':
+				cb.setChecked(state)
+
+	def selected_indices(self):
+		return [i for i, cb in enumerate(self.checks) if cb.isChecked() and self.rows[i][3] == 'changed']
+
+
 class OptionsEditor(QMainWindow):
 	def __init__(self):
 		super().__init__()
@@ -1207,35 +1275,46 @@ class OptionsEditor(QMainWindow):
 		for section, data in self.options.items():
 			for setting in data['settings']:
 				index.setdefault(setting['name'], []).append((section, setting))
-		applied, unchanged, invalid, missing = [], [], [], []
+		rows, missing = [], []
 		for rec in records:
 			name = rec.get('name', '')
 			value = str(rec.get('value', ''))
 			if name not in index:
 				missing.append(name)
 				continue
-			handled = False
+			matched = False
 			for section, setting in index[name]:
 				wd = self.widgets.get(f'{section}_{name}')
 				if not wd:
 					continue
-				handled = True
+				matched = True
+				current = self.get_widget_value(wd)
 				if not setting['editable'] or name in self.non_editable_fields:
-					invalid.append((name, value, 'read-only in target'))
-					continue
-				if not self.is_value_valid_for_target(setting, value):
-					invalid.append((name, value, 'out of range / not a valid option'))
-					continue
-				if self.values_equal(self.get_widget_value(wd), value):
-					unchanged.append(name)
-					continue
-				self.set_widget_value(wd, value)
-				applied.append(name)
-			if not handled:
+					rows.append([name, current, value, 'invalid', 'read-only in target', wd])
+				elif not self.is_value_valid_for_target(setting, value):
+					rows.append([name, current, value, 'invalid', 'out of range / not a valid option', wd])
+				elif self.values_equal(current, value):
+					rows.append([name, current, value, 'unchanged', '', wd])
+				else:
+					rows.append([name, current, value, 'changed', '', wd])
+			if not matched:
 				missing.append(name)
+		if not rows:
+			self.show_error_message('Import', f'None of the {len(missing)} imported settings exist in {self.game}.')
+			return
+		dialog = ImportPreviewDialog(rows, source_game, self.game, len(missing), self)
+		if not dialog.exec_():
+			self.log('Import cancelled')
+			return
+		applied = []
+		for i in dialog.selected_indices():
+			name, current, value, status, reason, wd = rows[i]
+			self.set_widget_value(wd, value)
+			applied.append(name)
 		if applied:
 			self.unsaved_changes = True
-		self.show_import_report(source_game, applied, unchanged, invalid, missing)
+		self.log(f'Import: applied {len(applied)} of {len(rows)} matched ({len(missing)} not in {self.game}) from {source_game}')
+		QMessageBox.information(self, 'Import Complete', f'Applied {len(applied)} setting(s) to {self.game}.\n{len(missing)} setting(s) were not present in this game.')
 
 	def set_widget_value(self, widget_data, value):
 		value = str(value)
@@ -1269,34 +1348,6 @@ class OptionsEditor(QMainWindow):
 			return abs(float(a) - float(b)) < 1e-9
 		except ValueError:
 			return a.lower() == b.lower()
-
-	def show_import_report(self, source_game, applied, unchanged, invalid, missing):
-		applied = list(dict.fromkeys(applied))
-		unchanged = list(dict.fromkeys(unchanged))
-		missing = list(dict.fromkeys(missing))
-		summary = (f'Imported from: {source_game}  ->  {self.game}\n\n'
-				   f'Applied (changed):   {len(applied)}\n'
-				   f'Unchanged (already equal):   {len(unchanged)}\n'
-				   f'Invalid (skipped):   {len(invalid)}\n'
-				   f'Not present in {self.game}:   {len(missing)}')
-		detail = ''
-		if applied:
-			detail += 'APPLIED (changed):\n  ' + '\n  '.join(applied) + '\n\n'
-		if unchanged:
-			detail += 'UNCHANGED (already equal):\n  ' + '\n  '.join(unchanged) + '\n\n'
-		if invalid:
-			inv = '\n  '.join(f'{n} = {v}  [{why}]' for n, v, why in invalid)
-			detail += 'INVALID (out of range / not valid for this game):\n  ' + inv + '\n\n'
-		if missing:
-			detail += f'NOT IN {self.game} (no matching setting):\n  ' + '\n  '.join(missing) + '\n\n'
-		box = QMessageBox(self)
-		box.setWindowTitle('Import Summary')
-		box.setIcon(QMessageBox.Information if applied else QMessageBox.Warning)
-		box.setText(summary)
-		if detail:
-			box.setDetailedText(detail)
-		self.setup_message_box(box).exec_()
-		self.log(f'Import: {len(applied)} applied, {len(unchanged)} unchanged, {len(invalid)} invalid, {len(missing)} not-in-target (from {source_game})')
 
 	def update_file_permissions(self):
 		if self.read_only_action.isChecked():
