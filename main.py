@@ -756,8 +756,6 @@ class OptionsEditor(QMainWindow):
 		try:
 			self.log("Starting load_file method")
 			default_path = os.path.expanduser("~\\Documents\\Call of Duty\\players")
-			base_path = os.path.expanduser("~\\Documents\\Call of Duty")
-			player_folders = self.find_player_folders(base_path)
 			game_files = self.file_mapping.get(self.game)
 			if not game_files:
 				self.log(f"No file mapping found for {self.game}")
@@ -877,8 +875,10 @@ class OptionsEditor(QMainWindow):
 		for base in bases:
 			players = os.path.join(base, "players")
 			if os.path.isdir(players):
-				roots.append(players)
-				roots.extend(self.find_player_folders(base))
+				xuid_dirs = self.find_player_folders(players)
+				if xuid_dirs:
+					roots.extend(xuid_dirs)   # mtime-sorted accounts first (most-recent wins)
+				roots.append(players)       # bare players/ as fallback
 			elif os.path.isdir(base):
 				roots.append(base)
 		seen, ordered = set(), []
