@@ -144,7 +144,15 @@ Hover over any setting to see:
 The **Advanced** menu exposes settings that are not stored in the plaintext config:
 - **Controller Settings (Binary)** — decodes the binary `.csb` (MWII) / BO7 profile blob:
   stick deadzones, stick sensitivity, aim response, and movement/interaction behaviors, with
-  friendly names for the identified settings. Read-only.
+  friendly names for the identified settings.
+  - **Float settings are editable.** Each identified numeric setting (deadzones, sensitivities,
+    aim response) shows a bounded spin box. **Save Changes to Game File** writes them back
+    **CRC-safe** (the `.csb` is a self-sealing checksum'd container, so the game accepts the
+    edit) after a confirmation prompt. A **timestamped `.bak`** is created automatically before
+    every write, and **Restore from Backup…** rolls back to any prior backup (validated before
+    it overwrites). Close the game before saving — this edits the live cloud-synced save.
+  - **Enum settings** (e.g. sprint / interact behavior) remain **read-only** — there is no
+    verified writer for the variable-length enum pool yet.
 - **View Config dvars (.cfg)** — decodes hashed `config*.cfg` gameplay/console dvars. For MWII
   the dvar names are recovered from a bundled dvar-hash dump (`dvar_hashes.txt`); MW 2019 uses a
   different 32-bit id format so those show as ids with readable values. Read-only.

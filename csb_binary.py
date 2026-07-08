@@ -11,7 +11,7 @@ File format (reverse-engineered, 28/28 findings verified):
 The dvar hash is a custom, non-invertible IW-engine FNV variant, so only settings we
 have positively identified carry friendly names; the rest are labelled by their raw id.
 """
-import os, re, struct, zlib
+import os, re, struct, zlib, shutil, datetime
 
 CRC_RESIDUE = 0x2144DF1C  # zlib.crc32(whole self-sealing file)
 
@@ -61,16 +61,68 @@ def decode(path):
             rows.append({"name": name, "hash": h, "value": v, "kind": "enum", "offset": off})
     return rows, crc_valid(data)
 
-def write_float(path, h, new_val):
-    """CRC-safe write of a float setting by hash. Returns (old, new)."""
+def float_range(name):
+    """(min, max, decimals, step) input guard for a float setting, by friendly name.
+    These are UI guardrails to prevent fat-finger corruption; the field itself is a raw
+    float32. Ranges reflect the in-game menus for the identified settings."""
+    n = (name or "").lower()
+    if "deadzone" in n or "min input" in n or "max input" in n:
+        return 0.0, 1.0, 3, 0.01           # stick deadzones are a 0..1 fraction
+    if "sensitivity" in n:
+        return 0.0, 100.0, 2, 0.5          # mouse/gamepad sens (verified 8.0)
+    if "aim" in n:
+        return 0.0, 20.0, 3, 0.1           # aim response / aim-assist strength
+    return 0.0, 1000.0, 4, 0.1             # unknown float: wide but bounded
+
+def write_floats(path, changes):
+    """CRC-safe batch write of float settings. `changes` maps hash -> new value.
+    Applies every change, re-seals the CRC once, writes, then re-opens to verify the
+    CRC is valid. Returns [(hash, old, new), ...]. Raises on unknown hash or bad seal."""
     data = bytearray(open(path, "rb").read())
-    off, old = _float_val(data, h)
-    if off is None:
-        raise KeyError(f"hash {h:#010x} not in {path}")
-    data[off:off + 4] = struct.pack("<f", float(new_val))
+    applied = []
+    for h, new_val in changes.items():
+        off, old = _float_val(data, h)
+        if off is None:
+            raise KeyError(f"hash {h:#010x} not in {path}")
+        data[off:off + 4] = struct.pack("<f", float(new_val))
+        applied.append((h, old, round(float(new_val), 4)))
     data[-4:] = struct.pack("<I", zlib.crc32(bytes(data[:-4])) & 0xFFFFFFFF)
+    if not crc_valid(bytes(data)):
+        raise ValueError("CRC re-seal failed; file not written")
     open(path, "wb").write(bytes(data))
-    return old, float(new_val)
+    if not crc_valid(open(path, "rb").read()):
+        raise ValueError("post-write CRC verification failed")
+    return applied
+
+def write_float(path, h, new_val):
+    """CRC-safe write of a single float setting by hash. Returns (old, new)."""
+    _, old, new = write_floats(path, {h: new_val})[0]
+    return old, new
+
+def backup(path):
+    """Copy `path` to a timestamped .bak beside it (metadata preserved). Returns the
+    backup path. Called before any binary write so a change is trivially reversible."""
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst = f"{path}.{stamp}.bak"
+    shutil.copy2(path, dst)
+    return dst
+
+def list_backups(path):
+    """Backups previously made for `path`, newest first."""
+    d = os.path.dirname(path) or "."
+    base = os.path.basename(path)
+    outs = [os.path.join(d, f) for f in os.listdir(d)
+            if f.startswith(base + ".") and f.endswith(".bak")]
+    return sorted(outs, reverse=True)
+
+def restore(path, backup_path):
+    """Restore `path` from a chosen backup. Verifies the backup's CRC first so we never
+    write a corrupt file back over the live save. Returns True on success."""
+    data = open(backup_path, "rb").read()
+    if not crc_valid(data):
+        raise ValueError("backup is not a valid .csb (CRC check failed)")
+    shutil.copy2(backup_path, path)
+    return True
 
 def find_csb():
     """Locate the real MWII settings.3.pc.cod22.csb in Connected Storage, or None."""

@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
 							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
-							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup)
+							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup, QDoubleSpinBox)
 from help_texts import get_help_texts
 
 
@@ -499,7 +499,7 @@ class OptionsEditor(QMainWindow):
 		warning_dialog.exec_()
 
 	def show_binary_settings(self):
-		'View controller/advanced settings stored in the binary .csb (not the plaintext config).'
+		'View/edit controller/advanced settings stored in the binary .csb (not the plaintext config).'
 		try:
 			import csb_binary
 		except Exception as e:
@@ -515,29 +515,134 @@ class OptionsEditor(QMainWindow):
 		except Exception as e:
 			self.show_error_message('Controller Settings', 'Could not decode: ' + str(e))
 			return
+
 		dlg = QDialog(self)
 		dlg.setWindowTitle('Controller / Advanced Settings (binary)')
-		dlg.resize(560, 480)
+		dlg.resize(620, 560)
 		lay = QVBoxLayout(dlg)
-		lay.addWidget(QLabel('<p>These live in the binary <b>.csb</b>, not the plaintext config: deadzones, '
-							 'stick sensitivity, aim response, and movement/interaction behaviors.</p>'
-							 '<p>CRC valid: ' + str(crc_ok) + '</p>'))
+		header = QLabel('<p>These live in the binary <b>.csb</b>, not the plaintext config: deadzones, stick sensitivity, aim response, and movement/interaction behaviors.</p>')
+		header.setWordWrap(True)
+		lay.addWidget(header)
+		crc_lbl = QLabel()
+		lay.addWidget(crc_lbl)
+
 		scroll = QScrollArea()
 		scroll.setWidgetResizable(True)
 		content = QWidget()
 		grid = QGridLayout(content)
 		grid.addWidget(QLabel('<b>Setting</b>'), 0, 0)
 		grid.addWidget(QLabel('<b>Value</b>'), 0, 1)
+		editors = {}
 		for i, r in enumerate(rows, 1):
 			grid.addWidget(QLabel(r['name']), i, 0)
-			grid.addWidget(QLabel(str(r['value'])), i, 1)
+			if r['kind'] == 'float':
+				lo, hi, dec, step = csb_binary.float_range(r['name'])
+				sb = QDoubleSpinBox()
+				sb.setDecimals(dec)
+				sb.setRange(lo, hi)
+				sb.setSingleStep(step)
+				sb.setValue(float(r['value']))
+				sb.setToolTip('Valid range %g - %g' % (lo, hi))
+				grid.addWidget(sb, i, 1)
+				editors[r['hash']] = [sb, float(r['value'])]
+			else:
+				lbl = QLabel(str(r['value']))
+				lbl.setStyleSheet('color: gray;')
+				lbl.setToolTip('Enum value - read-only (no safe writer for enums yet)')
+				grid.addWidget(lbl, i, 1)
 		content.setLayout(grid)
 		scroll.setWidget(content)
 		lay.addWidget(scroll)
-		lay.addWidget(QLabel('<i>Read-only preview. CRC-safe editing is the next step.</i>'))
-		btn = QPushButton('Close')
-		btn.clicked.connect(dlg.accept)
-		lay.addWidget(btn)
+
+		note = QLabel('<i>Float settings are editable and saved CRC-safe (a timestamped backup is made first). Enum values are read-only. Close the game before saving.</i>')
+		note.setWordWrap(True)
+		lay.addWidget(note)
+
+		def refresh_crc():
+			try:
+				_, ok = csb_binary.decode(path)
+			except Exception:
+				ok = False
+			crc_lbl.setText('<p>File: <b>' + os.path.basename(os.path.dirname(path)) + '</b> &nbsp; CRC valid: <b>' + str(ok) + '</b></p>')
+		refresh_crc()
+
+		def name_of(h):
+			for r in rows:
+				if r['hash'] == h:
+					return r['name']
+			return '%#010x' % h
+
+		def do_save():
+			changes = {}
+			for h, pair in editors.items():
+				if abs(pair[0].value() - pair[1]) > 1e-9:
+					changes[h] = pair[0].value()
+			if not changes:
+				QMessageBox.information(dlg, 'No changes', 'No float settings were changed.')
+				return
+			summary = '\n'.join('  - ' + name_of(h) + ' -> ' + str(v) for h, v in changes.items())
+			resp = QMessageBox.question(dlg, 'Write to game file?', 'This edits the live Connected-Storage save. Make sure the game is CLOSED.\n\nA timestamped backup will be created first.\n\nChanges:\n' + summary + '\n\nProceed?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+			if resp != QMessageBox.Yes:
+				return
+			try:
+				bpath = csb_binary.backup(path)
+				applied = csb_binary.write_floats(path, changes)
+			except Exception as e:
+				self.show_error_message('Controller Settings', 'Write failed: ' + str(e))
+				return
+			self.log('Binary settings: wrote %d change(s), backup at %s' % (len(applied), os.path.basename(bpath)))
+			for h, old, new in applied:
+				self.log('  ' + name_of(h) + ': ' + str(old) + ' -> ' + str(new))
+				if h in editors:
+					editors[h][1] = new
+			for r in rows:
+				if r['hash'] in changes:
+					r['value'] = changes[r['hash']]
+			refresh_crc()
+			QMessageBox.information(dlg, 'Saved', 'Wrote %d change(s).\nBackup:\n%s' % (len(applied), bpath))
+
+		def do_restore():
+			backups = csb_binary.list_backups(path)
+			start = backups[0] if backups else os.path.dirname(path)
+			bpath, _ = QFileDialog.getOpenFileName(dlg, 'Choose a backup to restore', start, 'Backups (*.bak);;All Files (*)')
+			if not bpath:
+				return
+			if QMessageBox.question(dlg, 'Restore backup?', 'Overwrite the live save with:\n' + bpath + ' ?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+				return
+			try:
+				csb_binary.restore(path, bpath)
+			except Exception as e:
+				self.show_error_message('Controller Settings', 'Restore failed: ' + str(e))
+				return
+			self.log('Binary settings: restored from %s' % os.path.basename(bpath))
+			try:
+				new_rows, _ = csb_binary.decode(path)
+				for r in new_rows:
+					if r['hash'] in editors:
+						editors[r['hash']][0].setValue(float(r['value']))
+						editors[r['hash']][1] = float(r['value'])
+			except Exception:
+				pass
+			refresh_crc()
+			QMessageBox.information(dlg, 'Restored', 'Restored from backup.')
+
+		btn_row = QHBoxLayout()
+		save_btn = QPushButton('Save Changes to Game File')
+		save_btn.clicked.connect(do_save)
+		restore_btn = QPushButton('Restore from Backup...')
+		restore_btn.clicked.connect(do_restore)
+		close_btn = QPushButton('Close')
+		close_btn.clicked.connect(dlg.accept)
+		btn_row.addWidget(save_btn)
+		btn_row.addWidget(restore_btn)
+		btn_row.addStretch(1)
+		btn_row.addWidget(close_btn)
+		lay.addLayout(btn_row)
+
+		if not editors:
+			save_btn.setEnabled(False)
+			save_btn.setToolTip('No editable float settings were identified in this file.')
+
 		self.log('Viewed binary controller settings: %d found (crc_ok=%s)' % (len(rows), crc_ok))
 		dlg.exec_()
 
