@@ -1341,6 +1341,7 @@ class OptionsEditor(QMainWindow):
 		elif value.lower() in ('true', 'false'):
 			widget = QCheckBox('On' if value.lower() == 'true' else 'Off')
 			widget.setChecked(value.lower() == 'true')
+			self._style_toggle(widget)
 			widget.stateChanged.connect(lambda st, w=widget: w.setText('On' if st else 'Off'))
 			widget.stateChanged.connect(self.set_unsaved_changes)
 		elif re.match(r'^-?\d+(\.\d+)?$', value):
@@ -1366,6 +1367,23 @@ class OptionsEditor(QMainWindow):
 			widget = QLineEdit(value)
 			widget.textChanged.connect(self.set_unsaved_changes)
 		return widget
+
+	def _style_toggle(self, checkbox):
+		'Give a boolean toggle a clearly visible switch indicator, independent of the theme.'
+		checkbox.setCursor(Qt.PointingHandCursor)
+		checkbox.setStyleSheet(
+			'QCheckBox { spacing: 8px; }'
+			'QCheckBox::indicator { width: 46px; height: 24px; }'
+			'QCheckBox::indicator:unchecked {'
+			'  image: none; border: 1px solid #757575; border-radius: 12px;'
+			'  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,'
+			'    stop:0 #f5f5f5, stop:0.45 #f5f5f5, stop:0.45 #9e9e9e, stop:1 #9e9e9e); }'
+			'QCheckBox::indicator:checked {'
+			'  image: none; border: 1px solid #43a047; border-radius: 12px;'
+			'  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,'
+			'    stop:0 #4caf50, stop:0.55 #4caf50, stop:0.55 #ffffff, stop:1 #ffffff); }'
+			'QCheckBox::indicator:hover { border: 1px solid #4caf50; }'
+		)
 
 	def get_options_for_combobox(self, setting):
 		if setting['name'] == "VoiceChatEffect":
