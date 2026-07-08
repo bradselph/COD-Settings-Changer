@@ -1306,8 +1306,6 @@ class OptionsEditor(QMainWindow):
 					widget.setToolTip(tooltip_text)
 				comment = QLabel(setting['comment'])
 				scroll_layout.addWidget(comment, i, 3)
-				file_type_label = QLabel(f"({setting['file_type']})")
-				scroll_layout.addWidget(file_type_label, i, 4)
 			scroll_widget.setLayout(scroll_layout)
 			scroll_area.setWidget(scroll_widget)
 			scroll_area.setWidgetResizable(True)
