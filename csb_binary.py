@@ -124,12 +124,38 @@ def restore(path, backup_path):
     shutil.copy2(backup_path, path)
     return True
 
-def find_csb():
-    """Locate the real MWII settings.3.pc.cod22.csb in Connected Storage, or None."""
+# ---------------------------------------------------------------------------
+# Per-game binary settings: each title has its OWN file. IW engine (MWII/MWIII)
+# uses the CRC-sealed .csb (editable floats); Treyarch (BO6/BO7) uses the .b0
+# profile blob (read-only enum pool). We locate strictly by the game's cod tag so
+# one game never shows another game's file.
+# ---------------------------------------------------------------------------
+GAME_META = {
+    "MW2 2022": {"cod": "cod22", "engine": "iw"},
+    "MW3 2023": {"cod": "cod23", "engine": "iw"},
+    "BO6 2024": {"cod": "cod24", "engine": "tr"},
+    "BO7 2025": {"cod": "cod25", "engine": "tr"},
+}
+
+def engine_for(game):
+    """'iw' (editable .csb) or 'tr' (read-only .b0), or None for an unknown game."""
+    return GAME_META.get(game, {}).get("engine")
+
+def expected_file_hint(game):
+    """Human hint of the file name for a game, for the manual-pick dialog."""
+    m = GAME_META.get(game)
+    if not m:
+        return "the settings 'save' file"
+    if m["engine"] == "iw":
+        return "settings.<N>.pc.%s.csb (the 'save' file inside it)" % m["cod"]
+    return "g.p.%s.1.0.b0 (the 'save' file inside it)" % m["cod"]
+
+def _iter_connected_storage():
+    """Yield (dir_basename, save_path) for every Connected-Storage container holding a 'save'."""
     lad = os.environ.get("LOCALAPPDATA", "")
     pkgs = os.path.join(lad, "Packages")
     if not os.path.isdir(pkgs):
-        return None
+        return
     for d in os.listdir(pkgs):
         if not d.startswith("38985CA0."):
             continue
@@ -138,9 +164,42 @@ def find_csb():
             if not os.path.isdir(root):
                 continue
             for base, _dirs, files in os.walk(root):
-                if base.endswith("settings.3.pc.cod22.csb") and "save" in files:
-                    return os.path.join(base, "save")
-    return None
+                if "save" in files:
+                    yield os.path.basename(base).lower(), os.path.join(base, "save")
+
+def find_binary_settings(game):
+    """Locate the binary settings/profile file for THIS game only. Returns (path, engine);
+    path is None if not found. Matching is anchored on the game's cod tag so titles never
+    cross-contaminate."""
+    m = GAME_META.get(game)
+    if not m:
+        return None, None
+    cod, engine = m["cod"], m["engine"]
+    for name, save in _iter_connected_storage():
+        if cod not in name:
+            continue
+        if engine == "iw" and name.startswith("settings.") and name.endswith(".csb"):
+            return save, engine
+        if engine == "tr" and name.endswith(".b0"):
+            return save, engine
+    return None, engine
+
+def decode_binary(path, engine):
+    """Uniform decode for the GUI. Returns {rows, crc_ok, editable, engine}.
+    IW .csb -> named settings with editable floats (+ CRC). Treyarch .b0 -> the decoded
+    profile value pool, read-only (hash->name not yet recovered, no CRC self-seal)."""
+    if engine == "iw":
+        rows, crc_ok = decode(path)
+        return {"rows": rows, "crc_ok": crc_ok, "editable": True, "engine": "iw"}
+    vals = decode_bo7_enums(path)
+    rows = [{"name": "Profile value %d" % i, "value": s, "kind": "value", "offset": o}
+            for i, (o, s) in enumerate(vals, 1)]
+    return {"rows": rows, "crc_ok": None, "editable": False, "engine": "tr"}
+
+def find_csb():
+    """Back-compat: locate the MWII settings.*.pc.cod22.csb specifically, or None."""
+    path, _ = find_binary_settings("MW2 2022")
+    return path
 
 # ---------------------------------------------------------------------------
 # BO7 / cod25 (Treyarch) profile binary: same length-prefixed enum pool as the

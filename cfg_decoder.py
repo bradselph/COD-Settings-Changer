@@ -40,17 +40,39 @@ def decode_cfg(path):
     rows.sort(key=lambda r: (not r["named"], r["key"].lower()))
     return rows, {"total": len(rows), "named": named}
 
-def find_cfgs():
-    """Find config*.cfg dvar files across all CoD titles (scoped to player folders)."""
+# Which Documents/Activision title folders belong to each game. The hashed config*.cfg
+# format is IW-engine only (MWII/MWIII); Treyarch titles (BO6/BO7) don't use it, so they
+# map to no folders and find_cfgs returns nothing for them.
+CFG_TITLE_DIRS = {
+    "MW2 2022": ("Call of Duty MWII",),
+    "MW3 2023": ("Call of Duty MWIII", "Call of Duty"),
+    "BO6 2024": (),
+    "BO7 2025": (),
+}
+
+def find_cfgs(game=None):
+    """Find config*.cfg dvar files, scoped to a specific game's title folder(s).
+    game=None keeps the legacy behavior of scanning every CoD title (used by the CLI)."""
     home = os.path.expanduser("~")
     docs = os.path.join(home, "Documents")
     lad = os.environ.get("LOCALAPPDATA", os.path.join(home, "AppData", "Local"))
+    if game is not None:
+        allowed = CFG_TITLE_DIRS.get(game)
+        if not allowed:                       # Treyarch / unknown -> not applicable
+            return []
+    else:
+        allowed = None
     bases = []
-    for parent, prefix in ((docs, "Call of Duty"), (os.path.join(lad, "Activision"), "Call of Duty")):
-        if os.path.isdir(parent):
-            for d in os.listdir(parent):
-                if d.startswith(prefix):
-                    bases.append(os.path.join(parent, d, "players"))
+    for parent in (docs, os.path.join(lad, "Activision")):
+        if not os.path.isdir(parent):
+            continue
+        for d in os.listdir(parent):
+            if allowed is not None:
+                if d not in allowed:          # exact match: 'Call of Duty MWII' != 'Call of Duty MWIII'
+                    continue
+            elif not d.startswith("Call of Duty"):
+                continue
+            bases.append(os.path.join(parent, d, "players"))
     found = []
     for players in bases:
         if not os.path.isdir(players):

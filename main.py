@@ -499,28 +499,41 @@ class OptionsEditor(QMainWindow):
 		warning_dialog.exec_()
 
 	def show_binary_settings(self):
-		'View/edit controller/advanced settings stored in the binary .csb (not the plaintext config).'
+		'View/edit the binary controller/advanced settings for the CURRENTLY LOADED game only.'
+		if not self.game:
+			self.show_error_message('Controller Settings', 'Select a game first (File > Change Game).')
+			return
 		try:
 			import csb_binary
 		except Exception as e:
 			self.show_error_message('Controller Settings', 'Binary module unavailable: ' + str(e))
 			return
-		path = csb_binary.find_csb()
+		engine = csb_binary.engine_for(self.game)
+		if engine is None:
+			self.show_error_message('Controller Settings', 'No binary settings mapping for ' + self.game + '.')
+			return
+		path, _ = csb_binary.find_binary_settings(self.game)
 		if not path:
-			path, _ = QFileDialog.getOpenFileName(self, "Select settings.3.pc.cod22.csb (the 'save' file)", '', 'All Files (*)')
+			path, _ = QFileDialog.getOpenFileName(self, 'Select ' + csb_binary.expected_file_hint(self.game) + ' for ' + self.game, '', 'All Files (*)')
 		if not path:
 			return
 		try:
-			rows, crc_ok = csb_binary.decode(path)
+			info = csb_binary.decode_binary(path, engine)
 		except Exception as e:
 			self.show_error_message('Controller Settings', 'Could not decode: ' + str(e))
 			return
+		rows = info['rows']
+		editable = info['editable']
 
 		dlg = QDialog(self)
-		dlg.setWindowTitle('Controller / Advanced Settings (binary)')
+		dlg.setWindowTitle('Controller / Advanced Settings (binary) -- ' + self.game)
 		dlg.resize(620, 560)
 		lay = QVBoxLayout(dlg)
-		header = QLabel('<p>These live in the binary <b>.csb</b>, not the plaintext config: deadzones, stick sensitivity, aim response, and movement/interaction behaviors.</p>')
+		if engine == 'iw':
+			intro = '<p>These live in the binary <b>.csb</b> for <b>' + self.game + '</b>: deadzones, stick sensitivity, aim response, and movement/interaction behaviors.</p>'
+		else:
+			intro = '<p>Decoded <b>' + self.game + '</b> profile blob (<b>.b0</b>). These are the stored control/movement values; the in-game names for these ids are not yet recovered, so they are read-only.</p>'
+		header = QLabel(intro)
 		header.setWordWrap(True)
 		lay.addWidget(header)
 		crc_lbl = QLabel()
@@ -535,7 +548,7 @@ class OptionsEditor(QMainWindow):
 		editors = {}
 		for i, r in enumerate(rows, 1):
 			grid.addWidget(QLabel(r['name']), i, 0)
-			if r['kind'] == 'float':
+			if editable and r.get('kind') == 'float':
 				lo, hi, dec, step = csb_binary.float_range(r['name'])
 				sb = QDoubleSpinBox()
 				sb.setDecimals(dec)
@@ -548,27 +561,33 @@ class OptionsEditor(QMainWindow):
 			else:
 				lbl = QLabel(str(r['value']))
 				lbl.setStyleSheet('color: gray;')
-				lbl.setToolTip('Enum value - read-only (no safe writer for enums yet)')
+				lbl.setToolTip('Read-only')
 				grid.addWidget(lbl, i, 1)
 		content.setLayout(grid)
 		scroll.setWidget(content)
 		lay.addWidget(scroll)
 
-		note = QLabel('<i>Float settings are editable and saved CRC-safe (a timestamped backup is made first). Enum values are read-only. Close the game before saving.</i>')
+		if editable:
+			note = QLabel('<i>Float settings are editable and saved CRC-safe (a timestamped backup is made first). Enum values are read-only. Close the game before saving.</i>')
+		else:
+			note = QLabel('<i>Read-only: this profile blob has no CRC self-seal and the id-to-name map is not yet recovered for this engine.</i>')
 		note.setWordWrap(True)
 		lay.addWidget(note)
 
 		def refresh_crc():
-			try:
-				_, ok = csb_binary.decode(path)
-			except Exception:
-				ok = False
-			crc_lbl.setText('<p>File: <b>' + os.path.basename(os.path.dirname(path)) + '</b> &nbsp; CRC valid: <b>' + str(ok) + '</b></p>')
+			if engine == 'iw':
+				try:
+					_, ok = csb_binary.decode(path)
+				except Exception:
+					ok = False
+				crc_lbl.setText('<p>File: <b>' + os.path.basename(os.path.dirname(path)) + '</b> &nbsp; CRC valid: <b>' + str(ok) + '</b></p>')
+			else:
+				crc_lbl.setText('<p>File: <b>' + os.path.basename(os.path.dirname(path)) + '</b> &nbsp; (read-only profile blob, no CRC self-seal)</p>')
 		refresh_crc()
 
 		def name_of(h):
 			for r in rows:
-				if r['hash'] == h:
+				if r.get('hash') == h:
 					return r['name']
 			return '%#010x' % h
 
@@ -581,7 +600,7 @@ class OptionsEditor(QMainWindow):
 				QMessageBox.information(dlg, 'No changes', 'No float settings were changed.')
 				return
 			summary = '\n'.join('  - ' + name_of(h) + ' -> ' + str(v) for h, v in changes.items())
-			resp = QMessageBox.question(dlg, 'Write to game file?', 'This edits the live Connected-Storage save. Make sure the game is CLOSED.\n\nA timestamped backup will be created first.\n\nChanges:\n' + summary + '\n\nProceed?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+			resp = QMessageBox.question(dlg, 'Write to game file?', 'This edits the live Connected-Storage save for ' + self.game + '. Make sure the game is CLOSED.\n\nA timestamped backup will be created first.\n\nChanges:\n' + summary + '\n\nProceed?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 			if resp != QMessageBox.Yes:
 				return
 			try:
@@ -590,13 +609,13 @@ class OptionsEditor(QMainWindow):
 			except Exception as e:
 				self.show_error_message('Controller Settings', 'Write failed: ' + str(e))
 				return
-			self.log('Binary settings: wrote %d change(s), backup at %s' % (len(applied), os.path.basename(bpath)))
+			self.log('Binary settings [' + self.game + ']: wrote %d change(s), backup at %s' % (len(applied), os.path.basename(bpath)))
 			for h, old, new in applied:
 				self.log('  ' + name_of(h) + ': ' + str(old) + ' -> ' + str(new))
 				if h in editors:
 					editors[h][1] = new
 			for r in rows:
-				if r['hash'] in changes:
+				if r.get('hash') in changes:
 					r['value'] = changes[r['hash']]
 			refresh_crc()
 			QMessageBox.information(dlg, 'Saved', 'Wrote %d change(s).\nBackup:\n%s' % (len(applied), bpath))
@@ -614,11 +633,11 @@ class OptionsEditor(QMainWindow):
 			except Exception as e:
 				self.show_error_message('Controller Settings', 'Restore failed: ' + str(e))
 				return
-			self.log('Binary settings: restored from %s' % os.path.basename(bpath))
+			self.log('Binary settings [' + self.game + ']: restored from %s' % os.path.basename(bpath))
 			try:
-				new_rows, _ = csb_binary.decode(path)
-				for r in new_rows:
-					if r['hash'] in editors:
+				new_info = csb_binary.decode_binary(path, engine)
+				for r in new_info['rows']:
+					if r.get('hash') in editors:
 						editors[r['hash']][0].setValue(float(r['value']))
 						editors[r['hash']][1] = float(r['value'])
 			except Exception:
@@ -627,35 +646,38 @@ class OptionsEditor(QMainWindow):
 			QMessageBox.information(dlg, 'Restored', 'Restored from backup.')
 
 		btn_row = QHBoxLayout()
-		save_btn = QPushButton('Save Changes to Game File')
-		save_btn.clicked.connect(do_save)
-		restore_btn = QPushButton('Restore from Backup...')
-		restore_btn.clicked.connect(do_restore)
+		if editable:
+			save_btn = QPushButton('Save Changes to Game File')
+			save_btn.clicked.connect(do_save)
+			restore_btn = QPushButton('Restore from Backup...')
+			restore_btn.clicked.connect(do_restore)
+			btn_row.addWidget(save_btn)
+			btn_row.addWidget(restore_btn)
+		btn_row.addStretch(1)
 		close_btn = QPushButton('Close')
 		close_btn.clicked.connect(dlg.accept)
-		btn_row.addWidget(save_btn)
-		btn_row.addWidget(restore_btn)
-		btn_row.addStretch(1)
 		btn_row.addWidget(close_btn)
 		lay.addLayout(btn_row)
 
-		if not editors:
-			save_btn.setEnabled(False)
-			save_btn.setToolTip('No editable float settings were identified in this file.')
-
-		self.log('Viewed binary controller settings: %d found (crc_ok=%s)' % (len(rows), crc_ok))
+		self.log('Viewed binary settings [' + self.game + ']: %d row(s) (editable=%s)' % (len(rows), editable))
 		dlg.exec_()
 
 	def show_cfg_dvars(self):
 		'View decoded hashed dvar config files. Names come from the bundled dvar hash dump.'
+		if not self.game:
+			self.show_error_message('Config dvars', 'Select a game first (File > Change Game).')
+			return
 		try:
 			import cfg_decoder
 		except Exception as e:
 			self.show_error_message('Config dvars', 'Decoder unavailable: ' + str(e))
 			return
-		paths = cfg_decoder.find_cfgs()
+		paths = cfg_decoder.find_cfgs(self.game)
 		if not paths:
-			p, _ = QFileDialog.getOpenFileName(self, 'Select a config .cfg file', '', 'Config (*.cfg);;All Files (*)')
+			if self.game in ('BO6 2024', 'BO7 2025'):
+				QMessageBox.information(self, 'Config dvars', 'Hashed config*.cfg dvars are an IW-engine format (MW2 / MW3). ' + self.game + ' (Treyarch) does not use them, so there is nothing to show here.')
+				return
+			p, _ = QFileDialog.getOpenFileName(self, 'Select a config .cfg file for ' + self.game, '', 'Config (*.cfg);;All Files (*)')
 			if not p:
 				return
 			paths = [p]
@@ -672,7 +694,7 @@ class OptionsEditor(QMainWindow):
 			return
 		p, rows, st = best
 		dlg = QDialog(self)
-		dlg.setWindowTitle('Config dvars (.cfg)')
+		dlg.setWindowTitle('Config dvars (.cfg) -- ' + self.game)
 		dlg.resize(640, 560)
 		lay = QVBoxLayout(dlg)
 		lay.addWidget(QLabel('<p>Decoded from <b>' + os.path.basename(p) + '</b> -- ' + str(st['named']) + ' of ' + str(st['total']) + ' dvars named from the hash dump. These are gameplay/console dvars, separate from the settings tabs.</p>'))
