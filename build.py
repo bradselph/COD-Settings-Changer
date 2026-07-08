@@ -38,7 +38,7 @@ def install_requirements(python_executable):
         sys.exit(1)
 
 def verify_required_files():
-    required_files = ["main.py", "help_texts.py", "csb_binary.py", "gear_icon.ico"]
+    required_files = ["main.py", "help_texts.py", "csb_binary.py", "cfg_decoder.py", "gear_icon.ico"]
     missing_files = [f for f in required_files if not os.path.exists(f)]
     if missing_files:
         print("Error: Missing required files:", missing_files)
@@ -62,6 +62,7 @@ def build_executable(python_executable, main_script="main.py"):
         main_script,
         "--add-data", f"help_texts.py{os.pathsep}.",
         "--add-data", f"csb_binary.py{os.pathsep}.",
+        "--add-data", f"cfg_decoder.py{os.pathsep}.",
         "--add-data", f"{icon_path}{os.pathsep}."
     ]
 
