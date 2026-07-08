@@ -244,12 +244,6 @@ class OptionsEditor(QMainWindow):
 		self.layout().addWidget(self.read_only_checkbox)
 		self.tab_widget = QTabWidget()
 
-		self.widget_mappings = {
-				"boolean":  QCheckBox,
-				"numeric":  NoScrollSlider,
-				"string":   QLineEdit,
-				"dropdown": NoScrollComboBox
-		}
 		if getattr(sys, 'frozen', False):
 			application_path = sys._MEIPASS
 		else:
@@ -268,11 +262,6 @@ class OptionsEditor(QMainWindow):
 				"Monitor", "GPUName", "DetectedFrequencyGHz", "DetectedMemoryAmountMB", "LastUsedGPU",
 				"GPUDriverVersion", "DisplayDriverVersion", "DisplayDriverVersionRecommended", "ESSDI"
 		]
-		self.setting_options = {
-				"VoiceChatEffect":   ["mw_default", "mw", "mw_classic"],
-				"TargetRefreshRate": ["60", "120"],
-				"Resolution":        ["1920x1080", "2560x1440", "3840x2160"],
-		}
 
 		self.file_mapping = {
 				"MW2 2022": {
@@ -407,36 +396,6 @@ class OptionsEditor(QMainWindow):
 		lay.addWidget(lbl)
 		self.tab_widget.addTab(placeholder, 'Welcome')
 		self.statusBar().showMessage('No game loaded - use File > Change Game to begin')
-
-	def get_combobox_options(self, setting):
-		return self.setting_options.get(setting["name"], [])
-
-	def create_widget(self, setting, value):
-		setting_type = self.get_setting_type(setting)
-		widget_class = self.widget_mappings.get(setting_type, QLineEdit)
-		widget = widget_class()
-
-		if isinstance(widget, QSlider):
-			widget.setValue(int(value))
-			widget.valueChanged.connect(self.set_unsaved_changes)
-		elif isinstance(widget, QComboBox):
-			widget.addItems(self.get_combobox_options(setting))
-			widget.setCurrentText(value)
-			widget.currentTextChanged.connect(self.set_unsaved_changes)
-		else:
-			widget.setText(value)
-			widget.textChanged.connect(self.set_unsaved_changes)
-
-		return widget
-
-	def get_setting_type(self, setting):
-		if setting["name"].endswith("Volume") or "Sensitivity" in setting["name"]:
-			return "numeric"
-		elif setting["name"].startswith("Enable") or setting["value"].lower() in ("true", "false"):
-			return "boolean"
-		elif "one of" in setting["comment"]:
-			return "dropdown"
-		return "string"
 
 	def is_txt_game(self):
 		"""BO6/BO7 store settings as plaintext .txt (double-buffered); earlier titles use .cst."""
@@ -1219,19 +1178,17 @@ class OptionsEditor(QMainWindow):
 				content = file.read()
 				if file_type == "GameSpecific":
 					if self.is_txt_game():
-						sections = re.split(r'//\n// [A-Za-z]+\n', content)[1:]
-						section_names = re.findall(r'//\n// ([A-Za-z]+)\n', content)
-						separator = '@'
+						sections = re.split(r'//\n// [A-Za-z][A-Za-z0-9 ]*\n', content)[1:]
+						section_names = re.findall(r'//\n// ([A-Za-z][A-Za-z0-9 ]*)\n', content)
 					else:
-						sections = re.split(r'//\n// [A-Za-z]+\n//', content)[1:]
-						section_names = re.findall(r'//\n// ([A-Za-z]+)\n//', content)
-						separator = ':'
+						sections = re.split(r'//\n// [A-Za-z][A-Za-z0-9 ]*\n//', content)[1:]
+						section_names = re.findall(r'//\n// ([A-Za-z][A-Za-z0-9 ]*)\n//', content)
 				else:  # GameAgnostic
 					sections = [content]
 					section_names = ["GameAgnostic"]
-					separator = '@' if self.is_txt_game() else ':'
 
 				for name, section in zip(section_names, sections):
+					name = name.strip()
 					if name not in self.options:
 						self.options[name] = {"settings": []}
 					lines = section.strip().split('\n')
@@ -1244,13 +1201,13 @@ class OptionsEditor(QMainWindow):
 								else:
 									key = key.split(':')[0].strip()
 							else:
-								key = key.split('@')[0].strip()
-							value = value.strip().strip('"')
+								key = key.split('@')[0].split(':')[0].strip()
+							value = value.strip()
 							comment = ""
 							if '//' in value:
 								value, comment = value.split('//', 1)
-								value = value.strip()
 								comment = comment.strip()
+							value = value.strip().strip('"')
 							self.options[name]["settings"].append({
 								"name": key,
 								"value": value,
@@ -1284,10 +1241,14 @@ class OptionsEditor(QMainWindow):
 					slider_layout.addWidget(slider)
 					slider_layout.addWidget(value_label)
 					scroll_layout.addLayout(slider_layout, i, 1)
-					self.widgets[f"{section}_{setting['name']}"] = {"slider": slider, "value_label": value_label}
+					wkey = f"{section}_{setting['name']}_{i}"
+					setting['_wkey'] = wkey
+					self.widgets[wkey] = {"slider": slider, "value_label": value_label}
 				else:
 					scroll_layout.addWidget(widget, i, 1)
-					self.widgets[f"{section}_{setting['name']}"] = {"widget": widget}
+					wkey = f"{section}_{setting['name']}_{i}"
+					setting['_wkey'] = wkey
+					self.widgets[wkey] = {"widget": widget}
 
 				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
 					'name'] not in self.non_editable_fields
@@ -1313,7 +1274,7 @@ class OptionsEditor(QMainWindow):
 
 		for section, data in self.options.items():
 			for setting in data["settings"]:
-				widget_key = f"{section}_{setting['name']}"
+				widget_key = setting.get('_wkey', '')
 				if widget_key in self.widgets:
 					widget_data = self.widgets[widget_key]
 					if "widget" in widget_data:
@@ -1330,10 +1291,12 @@ class OptionsEditor(QMainWindow):
 		if setting['name'] in self.non_editable_fields:
 			widget = QLineEdit(value)
 			widget.setReadOnly(True)
-		elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate", "Resolution", "RefreshRate"]:
+		elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate"]:
 			widget = NoScrollComboBox()
-			options = self.get_options_for_combobox(setting)
+			options = self.get_options_for_combobox(setting) or []
 			widget.addItems(options)
+			if widget.findText(value) < 0:
+				widget.insertItem(0, value)
 			widget.setCurrentText(value)
 			widget.currentTextChanged.connect(self.set_unsaved_changes)
 		elif value.lower() in ('true', 'false'):
@@ -1352,10 +1315,16 @@ class OptionsEditor(QMainWindow):
 			else:
 				widget.textChanged.connect(self.set_unsaved_changes)
 		elif "one of" in setting['comment']:
-			widget = NoScrollComboBox()
-			options = re.findall(r'\[(.*?)\]', setting['comment'])
-			if options:
-				widget.addItems(options[0].split(', '))
+			m = re.findall(r'\[(.*?)\]', setting['comment'])
+			if m:
+				opts = [o.strip() for o in m[0].split(',') if o.strip()]
+			else:
+				opts = [o.strip() for o in setting['comment'].split('one of', 1)[1].split(',') if o.strip()]
+			if opts:
+				widget = NoScrollComboBox()
+				widget.addItems(opts)
+				if widget.findText(value) < 0:
+					widget.insertItem(0, value)
 				widget.setCurrentText(value)
 				widget.currentTextChanged.connect(self.set_unsaved_changes)
 			else:
@@ -1442,7 +1411,7 @@ class OptionsEditor(QMainWindow):
 	def update_widget_states(self):
 		for section, data in self.options.items():
 			for setting in data["settings"]:
-				widget_key = f"{section}_{setting['name']}"
+				widget_key = setting.get('_wkey', '')
 				if widget_key in self.widgets:
 					widget_data = self.widgets[widget_key]
 					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
@@ -1462,8 +1431,8 @@ class OptionsEditor(QMainWindow):
 			self.show_error_message("Error", "One or both files are not loaded")
 			return
 		try:
-			self.save_file_with_permissions(self.file_path, "GameSpecific")
-			self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic")
+			skipped = self.save_file_with_permissions(self.file_path, "GameSpecific") or []
+			skipped += self.save_file_with_permissions(self.game_agnostic_file_path, "GameAgnostic") or []
 
 			# Mirror double-buffered .txt files so the game cannot reload a stale buffer
 			self.mirror_double_buffer(self.file_path)
@@ -1476,9 +1445,12 @@ class OptionsEditor(QMainWindow):
 				self.show_read_only_message()
 
 			self.log(f"Options saved to {self.file_path} and {self.game_agnostic_file_path}")
-			QMessageBox.information(self, "Success", f"Options for {self.game} saved successfully")
 			self.unsaved_changes = False
 			self.reload_file()
+			if skipped:
+				QMessageBox.warning(self, "Saved with skipped settings", f"Options for {self.game} were saved, but {len(skipped)} value(s) were out of range and were NOT written:\n- " + "\n- ".join(skipped[:25]))
+			else:
+				QMessageBox.information(self, "Success", f"Options for {self.game} saved successfully")
 		except Exception as e:
 			error_msg = f"Failed to save options for {self.game}: {str(e)}\n"
 			error_msg += f"Error type: {type(e).__name__}\n"
@@ -1495,7 +1467,7 @@ class OptionsEditor(QMainWindow):
 		for section, data in self.options.items():
 			for setting in data['settings']:
 				name = setting['name']
-				wd = self.widgets.get(f'{section}_{name}')
+				wd = self.widgets.get(setting.get('_wkey', ''))
 				value = self.get_widget_value(wd) if wd else setting['value']
 				records.append({'name': name, 'value': value, 'file_type': setting['file_type'], 'comment': setting['comment']})
 		payload = {'meta': {'game': self.game, 'app': 'CODOptionsEditor', 'version': '1.4', 'count': len(records)}, 'settings': records}
@@ -1540,7 +1512,7 @@ class OptionsEditor(QMainWindow):
 				continue
 			matched = False
 			for section, setting in index[name]:
-				wd = self.widgets.get(f'{section}_{name}')
+				wd = self.widgets.get(setting.get('_wkey', ''))
 				if not wd:
 					continue
 				matched = True
@@ -1619,7 +1591,7 @@ class OptionsEditor(QMainWindow):
 		original_permissions = os.stat(file_path).st_mode
 		try:
 			os.chmod(file_path, stat.S_IWRITE | stat.S_IREAD)
-			self.save_file(file_path, file_type)
+			return self.save_file(file_path, file_type)
 		finally:
 			os.chmod(file_path, original_permissions)
 
@@ -1646,30 +1618,40 @@ class OptionsEditor(QMainWindow):
 			self.log(f"Could not mirror double-buffer {sibling}: {e}")
 
 	def save_file(self, file_path, file_type):
+		skipped = []
 		try:
 			with open(file_path, 'r') as file:
 				lines = file.readlines()
+			used = set()
 			for i, line in enumerate(lines):
 				if '=' in line and not line.strip().startswith('//'):
 					key = line.split('=', 1)[0].strip()
 					if file_type == "GameSpecific":
 						if self.is_txt_game():
-							key = key.split('@')[0]
+							key = key.split('@')[0].strip()
 						else:
-							key = key.split(':')[0]
+							key = key.split(':')[0].strip()
 					else:
-						key = key.split('@')[0]
+						key = key.split('@')[0].split(':')[0].strip()
+					matched = False
 					for section, data in self.options.items():
 						for setting in data["settings"]:
-							if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type:
-								widget_key = f"{section}_{setting['name']}"
+							sid = id(setting)
+							if key == setting["name"] and setting["editable"] and setting["file_type"] == file_type and sid not in used:
+								widget_key = setting.get('_wkey', '')
 								if widget_key in self.widgets:
 									widget_data = self.widgets[widget_key]
 									value = self.get_widget_value(widget_data)
 									if self.is_value_in_range(setting, value):
 										lines[i] = self.format_line(file_type, line, setting, value)
 									else:
+										skipped.append(setting['name'])
 										self.log(f"Value {value} for {setting['name']} is out of range. Skipping.")
+								used.add(sid)
+								matched = True
+								break
+						if matched:
+							break
 			with open(file_path, 'w') as file:
 				file.writelines(lines)
 		except Exception as e:
@@ -1677,6 +1659,7 @@ class OptionsEditor(QMainWindow):
 			error_msg += f"Error type: {type(e).__name__}\n"
 			error_msg += f"Error args: {e.args}\n"
 			raise Exception(error_msg)
+		return skipped
 
 	def get_widget_value(self, widget_data):
 		if "slider" in widget_data:
@@ -1684,10 +1667,7 @@ class OptionsEditor(QMainWindow):
 		elif isinstance(widget_data["widget"], QCheckBox):
 			return str(widget_data["widget"].isChecked()).lower()
 		elif isinstance(widget_data["widget"], QComboBox):
-			value = widget_data["widget"].currentText()
-			if widget_data["widget"].objectName() == "TargetRefreshRate":
-				return value.split()[0]
-			return value
+			return widget_data["widget"].currentText()
 		elif isinstance(widget_data["widget"], QLineEdit):
 			return widget_data["widget"].text()
 		return ""
@@ -1705,20 +1685,13 @@ class OptionsEditor(QMainWindow):
 		return True
 
 	def format_line(self, file_type, line, setting, value):
-		if self.is_txt_game():
-			separator = "@" if "@" in line else "="
-			before_separator = line.split(separator)[0]
-			if "@" in line:
-				before_separator = line.split("=")[0]
-			return f"{before_separator} = {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-		else:
-			if file_type == "GameSpecific":
-				version_num = line.split(":")[1].split("=")[0].strip() if ":" in line else "0.0"
-				return f"{line.split(':')[0]}:{version_num} = \"{value}\"{' // ' + setting['comment'] if setting['comment'] else ''}\n"
-			else:
-				separator = "@" if "@" in line else "="
-				before_separator = line.split(separator)[0]
-				return f"{before_separator}{separator} {value}{' // ' + setting['comment'] if setting['comment'] else ''}\n"
+		# Preserve the original key and ALL its decoration (@instance;hashes, :version)
+		# by keeping everything up to the first '='; only the value and its trailing
+		# comment are replaced. Re-quote the value iff the original line quoted it.
+		head, _sep, rest = line.partition('=')
+		out_val = f'"{value}"' if rest.lstrip().startswith('"') else f'{value}'
+		comment = f" // {setting['comment']}" if setting['comment'] else ''
+		return f"{head.rstrip()} = {out_val}{comment}\n"
 
 	def reload_file(self):
 		if self.file_path and self.game_agnostic_file_path:

@@ -175,14 +175,21 @@ def find_binary_settings(game):
     if not m:
         return None, None
     cod, engine = m["cod"], m["engine"]
+    matches = []
     for name, save in _iter_connected_storage():
         if cod not in name:
             continue
-        if engine == "iw" and name.startswith("settings.") and name.endswith(".csb"):
-            return save, engine
-        if engine == "tr" and name.endswith(".b0"):
-            return save, engine
-    return None, engine
+        # IW: the BASE settings file is settings.<digit>.pc.cod..csb; skip the per-mode
+        # variants (settings.mp./.br./.cp./.dmz./.sp.). TR: the base profile, not the .pm. one.
+        if engine == "iw" and name.startswith("settings.") and name.endswith(".csb") and name[9:10].isdigit():
+            matches.append(save)
+        elif engine == "tr" and name.endswith(".b0") and ".pm." not in name:
+            matches.append(save)
+    if not matches:
+        return None, engine
+    # With multiple accounts, prefer the most recently modified save.
+    matches.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return matches[0], engine
 
 def decode_binary(path, engine):
     """Uniform decode for the GUI. Returns {rows, crc_ok, editable, engine}.
