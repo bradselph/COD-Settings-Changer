@@ -9,10 +9,11 @@ from PyQt5.QtCore import QSettings, Qt, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
-							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
+							 QScrollArea, QCheckBox, QComboBox, QLineEdit,
 							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
-							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup, QDoubleSpinBox, QListWidget, QListWidgetItem)
+							 QHBoxLayout, QMenu, QActionGroup, QDoubleSpinBox, QListWidget, QListWidgetItem)
 from help_texts import get_help_texts
+from setting_row import SettingRow, SettingSpec, CHANGED_COLOR
 
 
 class GameSelector(QDialog):
@@ -155,15 +156,6 @@ class LogWindow(QDockWidget):
 		super().closeEvent(event)
 
 
-class NoScrollSlider(QSlider):
-	def wheelEvent(self, event):
-		event.ignore()
-
-
-class NoScrollComboBox(QComboBox):
-	def wheelEvent(self, event):
-		event.ignore()
-
 class ImportPreviewDialog(QDialog):
 	def __init__(self, rows, source_game, target_game, missing_count, parent=None):
 		super().__init__(parent)
@@ -274,9 +266,6 @@ class OptionsEditor(QMainWindow):
 		self.setGeometry(100, 100, 1000, 600)
 		self.show_log_action = QAction("Show Log", self, checkable=True)
 		self.read_only_action = QAction("Save as Read-only", self, checkable=True)
-		self.read_only_checkbox = QCheckBox("Save as Read-only")
-		self.read_only_checkbox.setToolTip("Check this to save the file as read-only and prevent the game from overwriting your settings.")
-		self.layout().addWidget(self.read_only_checkbox)
 		self.tab_widget = QTabWidget()
 
 		if getattr(sys, 'frozen', False):
@@ -349,6 +338,9 @@ class OptionsEditor(QMainWindow):
 	def apply_theme(self, theme_name):
 		try:
 			apply_stylesheet(self.app, theme=theme_name)
+			for r in list(self.widgets.values()):
+				if hasattr(r, 'refresh_theme'):
+					r.refresh_theme()
 			settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
 			settings.setValue("theme", theme_name)
 
@@ -463,6 +455,7 @@ class OptionsEditor(QMainWindow):
 
 		options_menu = menu_bar.addMenu("Options")
 		options_menu.addAction(self.read_only_action)
+		options_menu.addAction(QAction("Revert All Changes", self, triggered=self.revert_all_changes))
 		options_menu.addMenu(self.create_theme_menu())
 		clear_settings_action = QAction("Clear All Settings", self)
 		clear_settings_action.triggered.connect(self.clear_all_settings)
@@ -475,6 +468,20 @@ class OptionsEditor(QMainWindow):
 		help_menu = menu_bar.addMenu("Help")
 		help_menu.addAction(QAction("About", self, triggered=self.show_about_dialog))
 		help_menu.addAction(QAction("Show Warning", self, triggered=self.show_first_time_warning))
+		corner = QWidget()
+		clay = QHBoxLayout(corner)
+		clay.setContentsMargins(0, 0, 8, 0)
+		clay.setSpacing(10)
+		self.read_only_toggle = QCheckBox("Save as read-only")
+		self.read_only_toggle.setToolTip("Save the config files read-only so the game can't overwrite your changes.")
+		self.read_only_toggle.toggled.connect(self.read_only_action.setChecked)
+		self.read_only_action.toggled.connect(self.read_only_toggle.setChecked)
+		clay.addWidget(self.read_only_toggle)
+		revert_chip = QPushButton("Revert all")
+		revert_chip.setToolTip("Revert every value to what's currently on disk")
+		revert_chip.clicked.connect(self.revert_all_changes)
+		clay.addWidget(revert_chip)
+		menu_bar.setCornerWidget(corner, Qt.TopRightCorner)
 	def show_first_time_warning(self):
 		warning_text = (
 				"<h3 style='color: #FF4444; text-align: center;'>WARNING: Advanced Application</h3>"
@@ -719,7 +726,7 @@ class OptionsEditor(QMainWindow):
 		about_text = """
 		<div style='text-align: center;'>
 			<h2>Call of Duty Options Editor</h2>
-			<p><b>Version: 1.4</b></p>
+			<p><b>Version: 1.5</b></p>
 			<p style='color: #FF4444;'><b>This application is FREE and costs $0.<br>
 			If you paid for this app, you got scammed.</b></p>
 			<p>This application is designed to edit options for Call of Duty games:</p>
@@ -814,6 +821,8 @@ class OptionsEditor(QMainWindow):
 
 		search_layout.addWidget(QLabel("Search:"))
 		search_layout.addWidget(self.search_bar)
+		self.search_results_label = QLabel("")
+		search_layout.addWidget(self.search_results_label)
 		search_layout.addWidget(QLabel("Category:"))
 		search_layout.addWidget(self.category_filter)
 
@@ -841,102 +850,42 @@ class OptionsEditor(QMainWindow):
 
 	def filter_settings(self):
 		try:
-			search_text = self.search_bar.text().lower()
+			text = self.search_bar.text().lower()
 			selected_category = self.category_filter.currentText()
 			current_tab = self.tab_widget.currentIndex()
-
-			highlight_color = "rgba(45, 140, 255, 0.3)"
-			normal_color = "none"
-
-			matching_positions = []
-
-			for tab_index in range(self.tab_widget.count()):
-				tab = self.tab_widget.widget(tab_index)
-				tab_name = self.tab_widget.tabText(tab_index)
-
-				if selected_category != "All Categories" and selected_category != tab_name:
-					self.tab_widget.setTabEnabled(tab_index, False)
+			total = 0
+			first = None
+			for ti in range(self.tab_widget.count()):
+				tab = self.tab_widget.widget(ti)
+				tab_name = self.tab_widget.tabText(ti)
+				if selected_category != 'All Categories' and selected_category != tab_name:
+					self.tab_widget.setTabEnabled(ti, False)
 					continue
-
-				self.tab_widget.setTabEnabled(tab_index, True)
-				if not isinstance(tab, QScrollArea):
-					continue
-
-				content_widget = tab.widget()
-				if not content_widget or not content_widget.layout():
-					continue
-
-				grid = content_widget.layout()
-				has_matches = False
-
-				for row in range(grid.rowCount()):
-					row_widgets = []
-					for col in range(grid.columnCount()):
-						item = grid.itemAtPosition(row, col)
-						if item and item.widget():
-							row_widgets.append(item.widget())
-							item.widget().setVisible(True)
-
-					if not row_widgets:
-						continue
-
-					should_highlight = False
-					label_widget = grid.itemAtPosition(row, 0)
-					if label_widget and label_widget.widget():
-						setting_name = label_widget.widget().text().lower().strip(':')
-
-						if search_text:
-							if search_text in setting_name:
-								should_highlight = True
-							elif setting_name in self.help_texts and search_text in self.help_texts[setting_name].lower():
-								should_highlight = True
-							else:
-								value_widget = grid.itemAtPosition(row, 1)
-								if value_widget and value_widget.widget():
-									widget = value_widget.widget()
-									if isinstance(widget, QLineEdit):
-										if search_text in widget.text().lower():
-											should_highlight = True
-									elif isinstance(widget, QComboBox):
-										if search_text in widget.currentText().lower():
-											should_highlight = True
-									elif isinstance(widget, QCheckBox):
-										if search_text in str(widget.isChecked()).lower():
-											should_highlight = True
-
-						if should_highlight:
-							matching_positions.append((tab_index, row))
-
-					style = f"QWidget {{ background: {highlight_color if should_highlight else normal_color}; }}"
-					for widget in row_widgets:
-						current_style = widget.styleSheet()
-						if should_highlight:
-							if not current_style:
-								widget.setStyleSheet(style)
-							else:
-								widget.setStyleSheet(current_style + style)
-						else:
-							widget.setStyleSheet(current_style.replace(f"background: {highlight_color};", ""))
-
-					if should_highlight:
-						has_matches = True
-
-				content_widget.setVisible(True)
-				self.tab_widget.setTabEnabled(tab_index, has_matches or not search_text)
-
-
-			if matching_positions and len(matching_positions) <= 3:
-				tab_index, row = matching_positions[0]
-				self.tab_widget.setCurrentIndex(tab_index)
-				scroll_area = self.tab_widget.widget(tab_index)
-				if isinstance(scroll_area, QScrollArea):
-					content_widget = scroll_area.widget()
-					if content_widget:
-
-						item = content_widget.layout().itemAtPosition(row, 0)
-						if item and item.widget():
-							scroll_area.ensureWidgetVisible(item.widget())
-
+				tab_matches = 0
+				for r in self._rows_in_tab(tab):
+					m = r.matches(text) if text else False
+					r.set_highlight(bool(text) and m)
+					if text and m:
+						tab_matches += 1
+						total += 1
+						if first is None:
+							first = (ti, r)
+				self.tab_widget.setTabEnabled(ti, (tab_matches > 0) or not text)
+			if not text:
+				self.search_results_label.setText('')
+			elif total == 0:
+				self.search_results_label.setText('No results')
+			else:
+				self.search_results_label.setText(str(total) + (' result' if total == 1 else ' results'))
+			if text and 0 < total <= 3 and first:
+				ti, r = first
+				self.tab_widget.setCurrentIndex(ti)
+				sa = self.tab_widget.widget(ti)
+				if isinstance(sa, QScrollArea):
+					sa.ensureWidgetVisible(r)
+			elif text and total == 0:
+				self.tab_widget.setTabEnabled(current_tab, True)
+				self.tab_widget.setCurrentIndex(current_tab)
 			elif self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
 			else:
@@ -944,9 +893,8 @@ class OptionsEditor(QMainWindow):
 					if self.tab_widget.isTabEnabled(i):
 						self.tab_widget.setCurrentIndex(i)
 						break
-
 		except Exception as e:
-			self.log(f"Error in filter_settings: {str(e)}")
+			self.log('Error in filter_settings: ' + str(e))
 
 	def change_game(self):
 		if self.check_unsaved_changes():
@@ -1258,208 +1206,71 @@ class OptionsEditor(QMainWindow):
 	def display_options(self):
 		self.tab_widget.clear()
 		self.widgets.clear()
-
 		for section, data in self.options.items():
 			scroll_area = QScrollArea()
-			scroll_widget = QWidget()
-			scroll_layout = QGridLayout()
-			scroll_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-			scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-			for i, setting in enumerate(data["settings"]):
-				label = QLabel(f"{setting['name']}:")
-				scroll_layout.addWidget(label, i, 0)
-				value = setting['value'].strip('"')
-				widget = self.create_widget(setting, value)
-				if isinstance(widget, tuple):  # For sliders with value labels
-					slider, value_label = widget
-					slider_layout = QHBoxLayout()
-					slider_layout.addWidget(slider)
-					slider_layout.addWidget(value_label)
-					scroll_layout.addLayout(slider_layout, i, 1)
-					wkey = f"{section}_{setting['name']}_{i}"
-					setting['_wkey'] = wkey
-					self.widgets[wkey] = {"slider": slider, "value_label": value_label}
-				else:
-					scroll_layout.addWidget(widget, i, 1)
-					wkey = f"{section}_{setting['name']}_{i}"
-					setting['_wkey'] = wkey
-					self.widgets[wkey] = {"widget": widget}
-
-				is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
-					'name'] not in self.non_editable_fields
-				if isinstance(widget, tuple):
-					slider.setEnabled(is_editable)
-					value_label.setEnabled(is_editable)
-				else:
-					widget.setEnabled(is_editable)
-
-				tooltip_text = self.help_texts.get(setting['name'], "No help text available for this setting.")
-				tooltip_text += f"\n\nValid range: {setting['comment']}" if setting['comment'] else ""
-				if isinstance(widget, tuple):
-					slider.setToolTip(tooltip_text)
-					value_label.setToolTip(tooltip_text)
-				else:
-					widget.setToolTip(tooltip_text)
-				comment = QLabel(setting['comment'])
-				scroll_layout.addWidget(comment, i, 3)
-			scroll_widget.setLayout(scroll_layout)
-			scroll_area.setWidget(scroll_widget)
 			scroll_area.setWidgetResizable(True)
+			content = QWidget()
+			vbox = QVBoxLayout(content)
+			vbox.setContentsMargins(0, 0, 0, 0)
+			vbox.setSpacing(0)
+			for i, setting in enumerate(data["settings"]):
+				wkey = f"{section}_{setting['name']}_{i}"
+				setting['_wkey'] = wkey
+				spec = SettingSpec(name=setting['name'], value=setting['value'], comment=setting['comment'], editable=setting['editable'], file_type=setting['file_type'], help_text=self.help_texts.get(setting['name'], ''), wkey=wkey)
+				row = SettingRow(spec, non_editable_fields=self.non_editable_fields)
+				row.valueChanged.connect(self.on_row_value_changed)
+				self.widgets[wkey] = row
+				vbox.addWidget(row)
+			vbox.addStretch(1)
+			scroll_area.setWidget(content)
 			self.tab_widget.addTab(scroll_area, section)
-
-		for section, data in self.options.items():
-			for setting in data["settings"]:
-				widget_key = setting.get('_wkey', '')
-				if widget_key in self.widgets:
-					widget_data = self.widgets[widget_key]
-					if "widget" in widget_data:
-						if isinstance(widget_data["widget"], QLineEdit):
-							if not widget_data["widget"].isEnabled():
-								widget_data["widget"].setStyleSheet("QLineEdit:disabled { color: gray; }")
-					elif "slider" in widget_data and "value_label" in widget_data:
-						if not widget_data["slider"].isEnabled():
-							widget_data["value_label"].setStyleSheet("QLineEdit:disabled { color: gray; }")
-
 		self.populate_category_filter()
-		self.update_widget_states()
-	def create_widget(self, setting, value):
-		if setting['name'] in self.non_editable_fields:
-			widget = QLineEdit(value)
-			widget.setReadOnly(True)
-		elif setting['name'] in ["VoiceChatEffect", "TargetRefreshRate"]:
-			widget = NoScrollComboBox()
-			options = self.get_options_for_combobox(setting) or []
-			widget.addItems(options)
-			if widget.findText(value) < 0:
-				widget.insertItem(0, value)
-			widget.setCurrentText(value)
-			widget.currentTextChanged.connect(self.set_unsaved_changes)
-		elif value.lower() in ('true', 'false'):
-			widget = QCheckBox('On' if value.lower() == 'true' else 'Off')
-			widget.setChecked(value.lower() == 'true')
-			self._style_toggle(widget)
-			widget.stateChanged.connect(lambda st, w=widget: w.setText('On' if st else 'Off'))
-			widget.stateChanged.connect(self.set_unsaved_changes)
-		elif re.match(r'^-?\d+(\.\d+)?$', value):
-			widget = self.create_slider_widget(setting, value)
-			if isinstance(widget, QSlider):
-				widget.valueChanged.connect(self.set_unsaved_changes)
-			elif isinstance(widget, tuple):  # For slider with line edit
-				widget[0].valueChanged.connect(self.set_unsaved_changes)
-				widget[1].textChanged.connect(self.set_unsaved_changes)
-			else:
-				widget.textChanged.connect(self.set_unsaved_changes)
-		elif "one of" in setting['comment']:
-			m = re.findall(r'\[(.*?)\]', setting['comment'])
-			if m:
-				opts = [o.strip() for o in m[0].split(',') if o.strip()]
-			else:
-				opts = [o.strip() for o in setting['comment'].split('one of', 1)[1].split(',') if o.strip()]
-			if opts:
-				widget = NoScrollComboBox()
-				widget.addItems(opts)
-				if widget.findText(value) < 0:
-					widget.insertItem(0, value)
-				widget.setCurrentText(value)
-				widget.currentTextChanged.connect(self.set_unsaved_changes)
-			else:
-				widget = QLineEdit(value)
-				widget.textChanged.connect(self.set_unsaved_changes)
+		self.update_dirty_state()
+	def on_row_value_changed(self, name, value):
+		row = self.sender()
+		base = getattr(row, 'baseline', '')
+		self.log(name + ': ' + str(base) + ' \u2192 ' + str(value))
+		self.update_dirty_state()
+	def update_dirty_state(self):
+		changed = [r for r in self.widgets.values() if hasattr(r, 'is_changed') and r.is_changed()]
+		n = len(changed)
+		self.unsaved_changes = (n > 0)
+		title = 'Call of Duty Options Editor'
+		if self.game:
+			title += ' - ' + self.game
+		if n:
+			title += '  \u2022'
+		self.setWindowTitle(title)
+		sb = self.statusBar()
+		if n:
+			sb.setStyleSheet('color: ' + CHANGED_COLOR + ';')
+			sb.showMessage(str(n) + (' unsaved change' if n == 1 else ' unsaved changes'))
 		else:
-			widget = QLineEdit(value)
-			widget.textChanged.connect(self.set_unsaved_changes)
-		return widget
-
-	def _style_toggle(self, checkbox):
-		'Give a boolean toggle a clearly visible switch indicator, independent of the theme.'
-		checkbox.setCursor(Qt.PointingHandCursor)
-		checkbox.setStyleSheet(
-			'QCheckBox { spacing: 8px; }'
-			'QCheckBox::indicator { width: 46px; height: 24px; }'
-			'QCheckBox::indicator:unchecked {'
-			'  image: none; border: 1px solid #757575; border-radius: 12px;'
-			'  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,'
-			'    stop:0 #f5f5f5, stop:0.45 #f5f5f5, stop:0.45 #9e9e9e, stop:1 #9e9e9e); }'
-			'QCheckBox::indicator:checked {'
-			'  image: none; border: 1px solid #43a047; border-radius: 12px;'
-			'  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,'
-			'    stop:0 #4caf50, stop:0.55 #4caf50, stop:0.55 #ffffff, stop:1 #ffffff); }'
-			'QCheckBox::indicator:hover { border: 1px solid #4caf50; }'
-		)
-
-	def get_options_for_combobox(self, setting):
-		if setting['name'] == "VoiceChatEffect":
-			return setting['comment'].split("one of ")[1].strip("[]").split(", ")
-		elif setting['name'] == "TargetRefreshRate":
-			return ["60 Hz", "120 Hz"]
-		elif setting['name'] == "Resolution":
-			return ["1920x1080", "2560x1440", "3840x2160"]
-		elif setting['name'] == "RefreshRate":
-			return ["60 Hz", "120 Hz"]
-
-	def create_slider_widget(self, setting, value):
-		if "to" in setting['comment']:
-			numbers = re.findall(r"-?\d+(?:\.\d+)?", setting['comment'])
-			if len(numbers) >= 2:
-				try:
-					min_val, max_val = float(numbers[0]), float(numbers[1])
-					is_whole_number = '.' not in numbers[0] and '.' not in numbers[1]
-					slider = NoScrollSlider(Qt.Horizontal)
-					line_edit = QLineEdit(f"{float(value):.6f}" if not is_whole_number else f"{int(value)}")
-
-					if is_whole_number:
-						slider.setRange(int(min_val), int(max_val))
-						slider.setValue(int(float(value)))
-					else:
-						slider.setRange(int(min_val * 1000), int(max_val * 1000))
-						slider.setValue(int(float(value) * 1000))
-
-					def update_slider_value(slider_value):
-						real_value = slider_value if is_whole_number else slider_value / 1000
-						line_edit.setText(f"{real_value:.6f}" if not is_whole_number else f"{int(real_value)}")
-
-					def update_line_value(text):
-						if text:
-							real_value = float(text)
-							if is_whole_number:
-								slider.setValue(int(real_value))
-							else:
-								slider.setValue(int(real_value * 1000))
-
-					slider.valueChanged.connect(update_slider_value)
-					line_edit.textChanged.connect(update_line_value)
-					slider.valueChanged.connect(self.set_unsaved_changes)
-					return slider, line_edit
-				except ValueError:
-					pass
-		widget = QLineEdit(value)
-		widget.textChanged.connect(self.set_unsaved_changes)
-		return widget
-
-	def update_slider_value(self, value, label, min_val, max_val, whole_number):
-		if whole_number:
-			real_value = value
-		else:
-			real_value = value / 1000
-		label.setText(f"{real_value:.6f}" if not whole_number else f"{real_value}")
-
-	def update_widget_states(self):
-		for section, data in self.options.items():
-			for setting in data["settings"]:
-				widget_key = setting.get('_wkey', '')
-				if widget_key in self.widgets:
-					widget_data = self.widgets[widget_key]
-					is_editable = setting['editable'] and not setting['name'].startswith("// DO NOT MODIFY") and setting[
-						'name'] not in self.non_editable_fields
-					if "slider" in widget_data:
-						widget_data["slider"].setEnabled(is_editable)
-						widget_data["value_label"].setEnabled(is_editable)
-					else:
-						widget_data["widget"].setEnabled(is_editable)
-
-	def set_unsaved_changes(self):
-		self.unsaved_changes = True
+			sb.setStyleSheet('')
+			sb.showMessage('No unsaved changes' if self.game else 'No game loaded - use File > Change Game to begin')
+	def revert_all_changes(self):
+		reverted = 0
+		for r in list(self.widgets.values()):
+			if hasattr(r, 'is_changed') and r.is_changed():
+				r.revert()
+				reverted += 1
+		if reverted:
+			self.log('Reverted ' + str(reverted) + ' change(s) to on-disk values')
+		self.update_dirty_state()
+	def _rows_in_tab(self, tab):
+		if not isinstance(tab, QScrollArea):
+			return []
+		content = tab.widget()
+		if not content or not content.layout():
+			return []
+		rows = []
+		lay = content.layout()
+		for i in range(lay.count()):
+			item = lay.itemAt(i)
+			w = item.widget() if item else None
+			if isinstance(w, SettingRow):
+				rows.append(w)
+		return rows
 
 	def save_options(self):
 		self.log(f"Starting save_options method for {self.game}")
@@ -1475,7 +1286,7 @@ class OptionsEditor(QMainWindow):
 			self.mirror_double_buffer(self.game_agnostic_file_path)
 
 			# Set files as read-only if checkbox is checked
-			if self.read_only_checkbox.isChecked():
+			if self.read_only_action.isChecked():
 				os.chmod(self.file_path, 0o444)  # Read-only for user, group, and others
 				os.chmod(self.game_agnostic_file_path, 0o444)
 				self.show_read_only_message()
@@ -1813,17 +1624,7 @@ class OptionsEditor(QMainWindow):
 		dlg.exec_()
 
 	def set_widget_value(self, widget_data, value):
-		value = str(value)
-		if 'slider' in widget_data:
-			widget_data['value_label'].setText(value)
-		else:
-			w = widget_data['widget']
-			if isinstance(w, QCheckBox):
-				w.setChecked(value.strip().lower() == 'true')
-			elif isinstance(w, QComboBox):
-				w.setCurrentText(value)
-			elif isinstance(w, QLineEdit):
-				w.setText(value)
+		widget_data.set_value(str(value))
 
 	def is_value_valid_for_target(self, setting, value):
 		comment = setting.get('comment', '') or ''
@@ -1879,7 +1680,7 @@ class OptionsEditor(QMainWindow):
 				data = src.read()
 			with open(sibling, "w") as dst:
 				dst.write(data)
-			if self.read_only_checkbox.isChecked():
+			if self.read_only_action.isChecked():
 				os.chmod(sibling, 0o444)
 			self.log(f"Mirrored double-buffer to {sibling}")
 		except Exception as e:
@@ -1930,15 +1731,7 @@ class OptionsEditor(QMainWindow):
 		return skipped
 
 	def get_widget_value(self, widget_data):
-		if "slider" in widget_data:
-			return widget_data["value_label"].text()
-		elif isinstance(widget_data["widget"], QCheckBox):
-			return str(widget_data["widget"].isChecked()).lower()
-		elif isinstance(widget_data["widget"], QComboBox):
-			return widget_data["widget"].currentText()
-		elif isinstance(widget_data["widget"], QLineEdit):
-			return widget_data["widget"].text()
-		return ""
+		return widget_data.value()
 
 	def is_value_in_range(self, setting, value):
 		if "to" in setting['comment']:
