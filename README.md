@@ -108,10 +108,27 @@ auto-detects the `.txt0` buffer and writes **both** on save so the game can't re
 ## Additional Features
 
 
+### Unified settings rows & change tracking
+Every setting is now one consistent row — `[dot] [name] [control] [revert] [range]` — where the
+control (toggle / dropdown / slider+number / read-only field) shares one height/radius/colour
+language keyed to the **active theme accent**, so all themes look native.
+- **Changed-since-load state**: when a value differs from what's on disk the row shows an **amber
+  dot**, tints its control amber, and reveals a per-row **↺ revert** button. The status bar shows a
+  live count and the window title gains a `•`.
+- **Revert**: click a row's ↺ to restore just that value, or **Options → Revert All Changes** (also
+  the "Revert all" chip in the top-right corner) to restore everything to disk.
+- **Save-as-read-only** is a single control now (the corner toggle and `Options` menu item share one
+  state); the old duplicate checkbox is gone.
+- Read-only rows (hardware fields / `DO NOT MODIFY`) render as a muted dashed field and never count
+  as changed.
+
 ### Search Functionality
-- Use the search bar to find specific settings
+- Use the search bar to find specific settings; a live **result count** ("N results" / "No results")
+  appears next to it
+- Matching rows highlight in the **theme accent**; non-matching tabs disable and the view auto-jumps
+  when there are only a few matches
 - Filter by category using the dropdown menu
-- Search works across setting names and descriptions
+- Search works across setting names, help text, and current values
 
 ### Tooltips
 Hover over any setting to see:
