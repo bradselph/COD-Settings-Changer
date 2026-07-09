@@ -30,6 +30,9 @@ FLOAT_NAMES = {
     0xf4c4d5b7: "Right Stick Max Input (deadzone)",
     0x23521cc0: "Left Trigger deadzone",
     0x211c4e99: "Right Trigger deadzone",
+    0xc822f9e4: "ADS Sensitivity Multiplier",
+    0xb83b71ab: "ADS Sensitivity Multiplier (Focus)",
+    0xb8af9e7f: "Tac-Stance Sensitivity",
     # Not yet live-verified (earlier best-guess -- may be imprecise; correlate to confirm):
     0xa4108446: "Mouse Horizontal Sensitivity (unverified)",
     0x06e0ad2f: "Aim Response / Aim-Assist (unverified)",
@@ -37,6 +40,8 @@ FLOAT_NAMES = {
 ENUM_NAMES = {
     0x30b3622f: "Automatic Sprint behavior",
     0x8e0d45ec: "Interact / Reload behavior",
+    0x099b6793: "Button Layout preset",       # verified live: buttons_default/buttons_lefty/...
+    0x09a55e2a: "Stick Layout preset",         # verified live: thumbstick_default/thumbstick_southpaw/...
 }
 
 # Best-effort setting labels for decoded control VALUES, from the 3-account diff / MWII menu RE
@@ -90,6 +95,17 @@ def _scan_enum_pool(data):
         if o >= 1 and data[o - 1] in (len(s), len(s) + 1):
             vals.append((o, s))
     return vals
+
+def _scan_enum_records(data):
+    """[id4][len1][ascii value] enum records (shared by .csb and .b0). Returns [(offset, id, value)].
+    Catches CamelCase values too (e.g. Alpha/Bravo); the name-table dvar names are padded with NUL
+    (not a length byte) so they don't match."""
+    out = []
+    for m in re.finditer(rb"[A-Za-z][A-Za-z0-9_]{2,}", data):
+        o, s = m.start(), m.group().decode("latin1")
+        if o >= 5 and data[o - 1] in (len(s), len(s) + 1):
+            out.append((o, struct.unpack("<I", data[o - 5:o - 1])[0], s))
+    return out
 
 def _scan_float_records(data):
     """Treyarch .b0 float records: [id4][01]..[08 04][float4] (15 bytes). Returns {id: (offset, float)}.
@@ -258,16 +274,17 @@ def decode_binary(path, engine):
         return {"rows": rows, "crc_ok": crc_ok, "editable": True, "engine": "iw"}
     data = open(path, "rb").read()
     rows = []
-    # Named controller floats (deadzones / stick sens / triggers). Read-only: the .b0 has no CRC
-    # self-seal + is double-buffered, so we don't write it (change these in-game instead).
+    # Named controller floats (deadzones / stick sens / triggers / multipliers). Read-only: the .b0
+    # has no CRC self-seal + is double-buffered, so we don't write it (change these in-game instead).
     frecs = _scan_float_records(data)
     for h, name in FLOAT_NAMES.items():
         if h in frecs:
             off, v = frecs[h]
             rows.append({"name": name, "hash": h, "value": v, "kind": "value", "offset": off})
-    # Then the decoded enum control values.
-    for i, (o, s) in enumerate(decode_bo7_enums(path), 1):
-        rows.append({"name": VALUE_LABELS.get(s, "Profile value %d" % i), "value": s, "kind": "value", "offset": o})
+    # Enum records: name by id (ENUM_NAMES, verified) first, then by value (VALUE_LABELS).
+    for i, (o, idv, s) in enumerate(_scan_enum_records(data), 1):
+        name = ENUM_NAMES.get(idv) or VALUE_LABELS.get(s) or ("Profile value %d" % i)
+        rows.append({"name": name, "hash": idv, "value": s, "kind": "value", "offset": o})
     return {"rows": rows, "crc_ok": None, "editable": False, "engine": "tr"}
 
 def find_csb():
