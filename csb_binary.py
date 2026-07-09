@@ -17,14 +17,21 @@ CRC_RESIDUE = 0x2144DF1C  # zlib.crc32(whole self-sealing file)
 
 # hash -> friendly in-game name (identified settings; extend as more are named)
 FLOAT_NAMES = {
-    0xa4108446: "Mouse Horizontal Sensitivity",
-    0xe94d915e: "Look Horizontal Sensitivity (gamepad)",
-    0x211c4e99: "Look Vertical Sensitivity (gamepad)",
-    0x83680ae9: "Left Stick Min Input (deadzone)",
-    0x93d9f49c: "Left Stick Max Input (deadzone)",
-    0xf4c4d5b7: "Right Stick Min Input (deadzone)",
-    0x8eaf5b13: "Right Stick Max Input (deadzone)",
-    0x06e0ad2f: "Aim Response / Aim-Assist strength",
+    # Verified by live in-game correlation (change a setting, diff the save -- tools/csb_correlate.py),
+    # 2026-07-09 on BO7's g.p.cod25.1.0.b0; the ids are shared with the MWII .csb. This corrected
+    # several earlier position-guessed labels: the L/R and min/max were swapped, and 0x211c4e99 was
+    # mislabeled "Look Vertical Sensitivity" -- it is actually the Right Trigger deadzone.
+    0x3fbbba5c: "Stick Sensitivity - Horizontal (gamepad)",
+    0xfd578836: "Stick Sensitivity - Vertical (gamepad)",
+    0x93d9f49c: "Left Stick Min Input (deadzone)",
+    0xf83593ea: "Left Stick Max Input (deadzone)",
+    0x83680ae9: "Right Stick Min Input (deadzone)",
+    0xf4c4d5b7: "Right Stick Max Input (deadzone)",
+    0x23521cc0: "Left Trigger deadzone",
+    0x211c4e99: "Right Trigger deadzone",
+    # Not yet live-verified (earlier best-guess -- may be imprecise; correlate to confirm):
+    0xa4108446: "Mouse Horizontal Sensitivity (unverified)",
+    0x06e0ad2f: "Aim Response / Aim-Assist (unverified)",
 }
 ENUM_NAMES = {
     0x30b3622f: "Automatic Sprint behavior",
@@ -82,6 +89,18 @@ def _scan_enum_pool(data):
         if o >= 1 and data[o - 1] in (len(s), len(s) + 1):
             vals.append((o, s))
     return vals
+
+def _scan_float_records(data):
+    """Treyarch .b0 float records: [id4][01]..[08 04][float4] (15 bytes). Returns {id: (offset, float)}.
+    Different layout from the IW .csb ([float][00][id]); reverse-engineered via live correlation."""
+    recs = {}
+    for p in range(len(data) - 15):
+        if data[p + 4] == 1 and data[p + 9] == 0x08 and data[p + 10] == 0x04:
+            f = struct.unpack("<f", data[p + 11:p + 15])[0]
+            if f == f and abs(f) < 1e4:              # finite, plausible
+                recs.setdefault(struct.unpack("<I", data[p:p + 4])[0], (p + 11, round(f, 4)))
+    return recs
+
 
 def decode(path):
     """Return (rows, crc_ok). rows: {name, hash, value, kind, offset}."""
@@ -236,9 +255,18 @@ def decode_binary(path, engine):
     if engine == "iw":
         rows, crc_ok = decode(path)
         return {"rows": rows, "crc_ok": crc_ok, "editable": True, "engine": "iw"}
-    vals = decode_bo7_enums(path)
-    rows = [{"name": VALUE_LABELS.get(s, "Profile value %d" % i), "value": s, "kind": "value", "offset": o}
-            for i, (o, s) in enumerate(vals, 1)]
+    data = open(path, "rb").read()
+    rows = []
+    # Named controller floats (deadzones / stick sens / triggers). Read-only: the .b0 has no CRC
+    # self-seal + is double-buffered, so we don't write it (change these in-game instead).
+    frecs = _scan_float_records(data)
+    for h, name in FLOAT_NAMES.items():
+        if h in frecs:
+            off, v = frecs[h]
+            rows.append({"name": name, "hash": h, "value": v, "kind": "value", "offset": off})
+    # Then the decoded enum control values.
+    for i, (o, s) in enumerate(decode_bo7_enums(path), 1):
+        rows.append({"name": VALUE_LABELS.get(s, "Profile value %d" % i), "value": s, "kind": "value", "offset": o})
     return {"rows": rows, "crc_ok": None, "editable": False, "engine": "tr"}
 
 def find_csb():
