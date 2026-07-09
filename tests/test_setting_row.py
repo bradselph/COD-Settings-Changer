@@ -58,7 +58,7 @@ def test_bool_value_and_signal_semantics():
     r = sr.SettingRow(_spec(name="DepthOfField", value="true"))
     assert r.value() == "true" and r._kind == "bool" and not r.is_changed()
     seen = []
-    r.valueChanged.connect(lambda n, v: seen.append((n, v)))
+    r.valueChanged.connect(lambda n, o, nv: seen.append((n, nv)))
     r.set_value("false")                 # programmatic set must NOT emit
     assert r.value() == "false" and r.is_changed() and seen == []
     r._on_committed()                    # a real user commit emits exactly once

@@ -884,8 +884,15 @@ class OptionsEditor(QMainWindow):
 				if isinstance(sa, QScrollArea):
 					sa.ensureWidgetVisible(r)
 			elif text and total == 0:
-				self.tab_widget.setTabEnabled(current_tab, True)
-				self.tab_widget.setCurrentIndex(current_tab)
+				tab_name_cur = self.tab_widget.tabText(current_tab)
+				if selected_category == 'All Categories' or selected_category == tab_name_cur:
+					self.tab_widget.setTabEnabled(current_tab, True)
+					self.tab_widget.setCurrentIndex(current_tab)
+				else:
+					for i in range(self.tab_widget.count()):
+						if self.tab_widget.isTabEnabled(i):
+							self.tab_widget.setCurrentIndex(i)
+							break
 			elif self.tab_widget.isTabEnabled(current_tab):
 				self.tab_widget.setCurrentIndex(current_tab)
 			else:
@@ -1226,10 +1233,8 @@ class OptionsEditor(QMainWindow):
 			self.tab_widget.addTab(scroll_area, section)
 		self.populate_category_filter()
 		self.update_dirty_state()
-	def on_row_value_changed(self, name, value):
-		row = self.sender()
-		base = getattr(row, 'baseline', '')
-		self.log(name + ': ' + str(base) + ' \u2192 ' + str(value))
+	def on_row_value_changed(self, name, old, new):
+		self.log(name + ': ' + str(old) + ' \u2192 ' + str(new))
 		self.update_dirty_state()
 	def update_dirty_state(self):
 		changed = [r for r in self.widgets.values() if hasattr(r, 'is_changed') and r.is_changed()]
@@ -1419,7 +1424,7 @@ class OptionsEditor(QMainWindow):
 			self.set_widget_value(wd, value)
 			applied.append(name)
 		if applied:
-			self.unsaved_changes = True
+			self.update_dirty_state()
 		self.log('Applied ' + str(len(applied)) + ' of ' + str(len(rows)) + ' matched (' + str(len(missing)) + ' not in ' + self.game + ') from ' + label)
 		QMessageBox.information(self, 'Apply Complete', 'Applied ' + str(len(applied)) + ' setting(s) to ' + self.game + '.\n' + str(len(missing)) + ' setting(s) were not present in this game.\n\nUse File > Save Options to write them to the game.')
 
@@ -1676,9 +1681,9 @@ class OptionsEditor(QMainWindow):
 		try:
 			if os.path.exists(sibling) and not os.access(sibling, os.W_OK):
 				os.chmod(sibling, stat.S_IWRITE | stat.S_IREAD)
-			with open(path, "r") as src:
+			with open(path, "rb") as src:
 				data = src.read()
-			with open(sibling, "w") as dst:
+			with open(sibling, "wb") as dst:
 				dst.write(data)
 			if self.read_only_action.isChecked():
 				os.chmod(sibling, 0o444)
@@ -1689,6 +1694,8 @@ class OptionsEditor(QMainWindow):
 	def save_file(self, file_path, file_type):
 		skipped = []
 		try:
+			with open(file_path, 'rb') as _f:
+				_newline = '\r\n' if b'\r\n' in _f.read() else '\n'
 			with open(file_path, 'r') as file:
 				lines = file.readlines()
 			used = set()
@@ -1721,7 +1728,7 @@ class OptionsEditor(QMainWindow):
 								break
 						if matched:
 							break
-			with open(file_path, 'w') as file:
+			with open(file_path, 'w', newline=_newline) as file:
 				file.writelines(lines)
 		except Exception as e:
 			error_msg = f"Failed to save options to {file_path}: {str(e)}\n"
@@ -1776,8 +1783,7 @@ class OptionsEditor(QMainWindow):
 					QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
 					QMessageBox.Save
 			)
-			msg_box = self.setup_message_box(msg_box)
-			reply = msg_box.exec_()
+			reply = msg_box
 			if reply == QMessageBox.Save:
 				self.save_options()
 				return True

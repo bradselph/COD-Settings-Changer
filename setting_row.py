@@ -12,6 +12,7 @@ import os
 import re
 
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (QWidget, QLabel, QLineEdit, QComboBox, QSlider, QCheckBox,
                              QHBoxLayout, QToolButton, QSizePolicy)
 
@@ -121,21 +122,24 @@ class ToggleSwitch(QCheckBox):
             self.refresh_theme()
 
     def refresh_theme(self):
+        # Colors are theme-derived so the pill stays visible on light AND dark themes
+        # (the old hardcoded #f5f5f5 off-state was invisible on light backgrounds).
         c = theme_colors()
         on = c["changed"] if self._changed else c["accent"]
-        off_border = c["changed"] if self._changed else c["surface_light"]
-        track = c["surface_light"]
+        border = c["changed"] if self._changed else c["text_secondary"]
+        knob = c["text"]              # high contrast with the page background either way
+        track = c["text_secondary"]   # dark-grey on light themes, mid-grey on dark themes
         self.setStyleSheet(
             "QCheckBox { spacing: 8px; }"
             "QCheckBox::indicator { width: 40px; height: 20px; }"
             "QCheckBox::indicator:unchecked {"
-            f"  image: none; border: 1px solid {off_border}; border-radius: 10px;"
+            f"  image: none; border: 1px solid {border}; border-radius: 10px;"
             f"  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            f"    stop:0 #f5f5f5, stop:0.5 #f5f5f5, stop:0.5 {track}, stop:1 {track}); }}"
+            f"    stop:0 {knob}, stop:0.5 {knob}, stop:0.5 {track}, stop:1 {track}); }}"
             "QCheckBox::indicator:checked {"
             f"  image: none; border: 1px solid {on}; border-radius: 10px;"
             f"  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            f"    stop:0 {on}, stop:0.55 {on}, stop:0.55 #ffffff, stop:1 #ffffff); }}"
+            f"    stop:0 {on}, stop:0.55 {on}, stop:0.55 {knob}, stop:1 {knob}); }}"
         )
 
 
@@ -159,13 +163,14 @@ class SettingRow(QWidget):
     dropdown, slider+number, or read-only field chosen by the same rules as the old
     create_widget(). Reports edits via valueChanged(name, new_value)."""
 
-    valueChanged = pyqtSignal(str, str)   # (setting name, new value)
+    valueChanged = pyqtSignal(str, str, str)   # (setting name, old value, new value)
     SLIDER_SCALE = 1000                   # float sliders are integer-scaled by this
 
     def __init__(self, spec, non_editable_fields=None, parent=None):
         super().__init__(parent)
         self.spec = spec
         self.baseline = "" if spec.value is None else str(spec.value)
+        self._prev = self.baseline        # last committed value, for old->new change logging
         self._non_editable = set(non_editable_fields or [])
         self._kind = "text"               # bool | enum | slider | text
         self._is_int = True
@@ -361,6 +366,7 @@ class SettingRow(QWidget):
                 pass
         elif self._kind == "bool":
             self._control.setChecked(value.strip().lower() == "true")
+            self._control.setText("On" if self._control.isChecked() else "Off")   # signal is blocked; sync text
         elif self._kind == "enum":
             if self._control.findText(value) < 0:
                 self._control.insertItem(0, value)
@@ -376,12 +382,15 @@ class SettingRow(QWidget):
         return not values_equal(self.value(), self.baseline)
 
     def revert(self):
+        old = self.value()
         self.set_value(self.baseline)
-        self.valueChanged.emit(self.spec.name, self.value())
+        self._prev = self.value()
+        self.valueChanged.emit(self.spec.name, old, self.value())
 
     def reset_baseline(self, new_value=None):
         """After a save/reload, the on-disk value becomes the new baseline."""
         self.baseline = self.value() if new_value is None else str(new_value)
+        self._prev = self.baseline
         self._sync_changed()
 
     def set_editable(self, editable):
@@ -459,8 +468,10 @@ class SettingRow(QWidget):
 
     # ---- internals ----
     def _on_committed(self, *args):
+        old, new = self._prev, self.value()
+        self._prev = new
         self._sync_changed()
-        self.valueChanged.emit(self.spec.name, self.value())
+        self.valueChanged.emit(self.spec.name, old, new)
 
     def _block(self, on):
         for w in (self._slider, self._numbox, self._control):
@@ -469,11 +480,8 @@ class SettingRow(QWidget):
 
 
 def _hex_rgb(color):
-    """(r, g, b) for a #rrggbb string, with a safe fallback."""
-    color = (color or "").lstrip("#")
-    if len(color) == 6:
-        try:
-            return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
-        except ValueError:
-            pass
+    """(r, g, b) for any Qt-parseable colour (#rrggbb, #aarrggbb, named, ...), else fallback."""
+    qc = QColor(color)
+    if qc.isValid():
+        return qc.red(), qc.green(), qc.blue()
     return 45, 140, 255
