@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QSlider, QComboBox, QLineEdit,
 							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
-							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup, QDoubleSpinBox)
+							 QHBoxLayout, QSizePolicy, QMenu, QActionGroup, QDoubleSpinBox, QListWidget, QListWidgetItem)
 from help_texts import get_help_texts
 
 
@@ -231,6 +231,39 @@ class ImportPreviewDialog(QDialog):
 		return [i for i, cb in enumerate(self.checks) if cb.isChecked() and self.rows[i][3] == 'changed']
 
 
+class PresetMetaDialog(QDialog):
+	'Collects title/author/description when exporting or saving a shareable preset.'
+	def __init__(self, default_title, default_author='', parent=None):
+		super().__init__(parent)
+		self.setWindowTitle('Preset Details')
+		self.resize(460, 320)
+		layout = QVBoxLayout(self)
+		layout.addWidget(QLabel('Name this preset so others know what it is. Author and description are optional.'))
+		form = QGridLayout()
+		form.addWidget(QLabel('Title:'), 0, 0)
+		self.title_edit = QLineEdit(default_title)
+		form.addWidget(self.title_edit, 0, 1)
+		form.addWidget(QLabel('Author:'), 1, 0)
+		self.author_edit = QLineEdit(default_author)
+		form.addWidget(self.author_edit, 1, 1)
+		form.addWidget(QLabel('Description:'), 2, 0)
+		self.desc_edit = QTextEdit()
+		self.desc_edit.setPlaceholderText('e.g. Competitive low-latency, high-visibility, controller aim tuning...')
+		form.addWidget(self.desc_edit, 2, 1)
+		layout.addLayout(form)
+		btns = QHBoxLayout()
+		ok = QPushButton('OK')
+		cancel = QPushButton('Cancel')
+		ok.clicked.connect(self.accept)
+		cancel.clicked.connect(self.reject)
+		btns.addStretch()
+		btns.addWidget(ok)
+		btns.addWidget(cancel)
+		layout.addLayout(btns)
+	def values(self):
+		return {'title': self.title_edit.text().strip(), 'author': self.author_edit.text().strip(), 'description': self.desc_edit.toPlainText().strip()}
+
+
 class OptionsEditor(QMainWindow):
 	def __init__(self):
 		super().__init__()
@@ -416,6 +449,7 @@ class OptionsEditor(QMainWindow):
 		file_menu.addSeparator()
 		file_menu.addAction(QAction("Export Settings...", self, triggered=self.export_settings))
 		file_menu.addAction(QAction("Import Settings...", self, triggered=self.import_settings))
+		file_menu.addAction(QAction("Settings Library...", self, triggered=self.show_settings_library))
 		file_menu.addAction(QAction("Reload", self, triggered=self.reload_file))
 		file_menu.addAction(QAction("Change Game", self, triggered=self.change_game))
 		file_menu.addSeparator()
@@ -1459,46 +1493,75 @@ class OptionsEditor(QMainWindow):
 			self.log(error_msg)
 
 	def export_settings(self):
-		'Save the current (edited) settings to a portable .codsettings (JSON) file.'
+		'Export current settings to a shareable .codsettings file (others can import it).'
 		if not self.options:
 			self.show_error_message('Export', 'Load a game first, then export.')
 			return
-		records = []
-		for section, data in self.options.items():
-			for setting in data['settings']:
-				name = setting['name']
-				wd = self.widgets.get(setting.get('_wkey', ''))
-				value = self.get_widget_value(wd) if wd else setting['value']
-				records.append({'name': name, 'value': value, 'file_type': setting['file_type'], 'comment': setting['comment']})
-		payload = {'meta': {'game': self.game, 'app': 'CODOptionsEditor', 'version': '1.4', 'count': len(records)}, 'settings': records}
-		default_name = f"{self.game.replace(' ', '_')}_settings.codsettings"
-		path, _ = QFileDialog.getSaveFileName(self, 'Export Settings', default_name, 'COD Settings (*.codsettings *.json);;All Files (*)')
+		store = QSettings("Lif3Snatcher's", 'CODOptionsEditor')
+		meta_dlg = PresetMetaDialog(f'{self.game} settings', store.value('preset_author', '', type=str), self)
+		if not meta_dlg.exec_():
+			return
+		meta = meta_dlg.values()
+		store.setValue('preset_author', meta['author'])
+		records = self._collect_records()
+		payload = self._build_payload(records, meta)
+		safe = re.sub(r'[^A-Za-z0-9_-]+', '_', meta['title'] or self.game).strip('_') or 'settings'
+		path, _ = QFileDialog.getSaveFileName(self, 'Export / Share Settings', f'{safe}.codsettings', 'COD Settings (*.codsettings *.json);;All Files (*)')
 		if not path:
 			return
 		try:
 			with open(path, 'w', encoding='utf-8') as f:
 				json.dump(payload, f, indent=2)
 			self.log(f'Exported {len(records)} settings from {self.game} to {path}')
-			QMessageBox.information(self, 'Export Complete', f'Exported {len(records)} settings for {self.game}.')
+			QMessageBox.information(self, 'Export Complete', 'Saved ' + str(len(records)) + ' settings as "' + meta['title'] + '".\n\nShare this .codsettings file with others -- they can load it via File > Import Settings or add it to their Settings Library.')
 		except Exception as e:
 			self.show_error_message('Export Failed', str(e))
 
 	def import_settings(self):
-		'Import settings by name -- works across profiles and across games.'
+		"Apply a shared .codsettings file to the loaded game (matched by setting name)."
 		if not self.options:
 			self.show_error_message('Import', 'Load the target game first, then import.')
 			return
-		path, _ = QFileDialog.getOpenFileName(self, 'Import Settings', '', 'COD Settings (*.codsettings *.json);;All Files (*)')
+		path, _ = QFileDialog.getOpenFileName(self, 'Import / Apply Settings', '', 'COD Settings (*.codsettings *.json);;All Files (*)')
 		if not path:
 			return
+		payload = self._read_preset(path)
+		if payload is None:
+			return
+		meta = payload.get('meta', {})
+		self._apply_records(payload.get('settings', []), meta.get('game', 'unknown'), meta.get('title') or os.path.basename(path))
+
+	def _read_preset(self, path):
+		'Load and lightly validate a .codsettings payload; None on failure.'
 		try:
 			with open(path, 'r', encoding='utf-8') as f:
 				payload = json.load(f)
+			if not isinstance(payload, dict) or 'settings' not in payload:
+				raise ValueError('not a valid .codsettings file')
+			return payload
 		except Exception as e:
-			self.show_error_message('Import Failed', f'Could not read file: {e}')
+			self.show_error_message('Preset', 'Could not read ' + os.path.basename(path) + ': ' + str(e))
+			return None
+
+	def _collect_records(self):
+		'Snapshot the current (edited) widget values as portable records.'
+		records = []
+		for section, data in self.options.items():
+			for setting in data['settings']:
+				wd = self.widgets.get(setting.get('_wkey', ''))
+				value = self.get_widget_value(wd) if wd else setting['value']
+				records.append({'name': setting['name'], 'value': value, 'file_type': setting['file_type'], 'comment': setting['comment']})
+		return records
+
+	def _build_payload(self, records, meta):
+		'Assemble a .codsettings payload with sharing metadata.'
+		return {'meta': {'title': (meta.get('title') or (self.game + ' settings')), 'author': meta.get('author', ''), 'description': meta.get('description', ''), 'game': self.game, 'app': 'CODOptionsEditor', 'version': '1.5', 'count': len(records)}, 'settings': records}
+
+	def _apply_records(self, records, source_game, source_label=''):
+		'Match records to the loaded game by name, preview, and apply the selected ones.'
+		if not self.options:
+			self.show_error_message('Apply', 'Load the target game first.')
 			return
-		records = payload.get('settings', [])
-		source_game = payload.get('meta', {}).get('game', 'unknown')
 		index = {}
 		for section, data in self.options.items():
 			for setting in data['settings']:
@@ -1528,11 +1591,12 @@ class OptionsEditor(QMainWindow):
 			if not matched:
 				missing.append(name)
 		if not rows:
-			self.show_error_message('Import', f'None of the {len(missing)} imported settings exist in {self.game}.')
+			self.show_error_message('Apply', 'None of the ' + str(len(missing)) + ' settings exist in ' + self.game + '.')
 			return
-		dialog = ImportPreviewDialog(rows, source_game, self.game, len(missing), self)
+		label = source_label or source_game or 'preset'
+		dialog = ImportPreviewDialog(rows, label, self.game, len(missing), self)
 		if not dialog.exec_():
-			self.log('Import cancelled')
+			self.log('Apply cancelled')
 			return
 		applied = []
 		for i in dialog.selected_indices():
@@ -1541,8 +1605,204 @@ class OptionsEditor(QMainWindow):
 			applied.append(name)
 		if applied:
 			self.unsaved_changes = True
-		self.log(f'Import: applied {len(applied)} of {len(rows)} matched ({len(missing)} not in {self.game}) from {source_game}')
-		QMessageBox.information(self, 'Import Complete', f'Applied {len(applied)} setting(s) to {self.game}.\n{len(missing)} setting(s) were not present in this game.')
+		self.log('Applied ' + str(len(applied)) + ' of ' + str(len(rows)) + ' matched (' + str(len(missing)) + ' not in ' + self.game + ') from ' + label)
+		QMessageBox.information(self, 'Apply Complete', 'Applied ' + str(len(applied)) + ' setting(s) to ' + self.game + '.\n' + str(len(missing)) + ' setting(s) were not present in this game.\n\nUse File > Save Options to write them to the game.')
+
+	def _preset_dirs(self):
+		'Return (recommended_dir, user_dir); user_dir is created if missing.'
+		if getattr(sys, 'frozen', False):
+			app_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+		else:
+			app_dir = os.path.dirname(os.path.abspath(__file__))
+		recommended = os.path.join(app_dir, 'presets')
+		lad = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+		user = os.path.join(lad, 'CODOptionsEditor', 'presets')
+		try:
+			os.makedirs(user, exist_ok=True)
+		except OSError:
+			pass
+		return recommended, user
+
+	def save_current_as_preset(self):
+		'Save the current settings into the local Settings Library as a reusable preset.'
+		if not self.options:
+			self.show_error_message('Save Preset', 'Load a game first.')
+			return None
+		store = QSettings("Lif3Snatcher's", 'CODOptionsEditor')
+		meta_dlg = PresetMetaDialog(f'{self.game} settings', store.value('preset_author', '', type=str), self)
+		if not meta_dlg.exec_():
+			return None
+		meta = meta_dlg.values()
+		store.setValue('preset_author', meta['author'])
+		_, user_dir = self._preset_dirs()
+		payload = self._build_payload(self._collect_records(), meta)
+		safe = re.sub(r'[^A-Za-z0-9_-]+', '_', (meta['title'] or self.game)).strip('_') or 'preset'
+		path = os.path.join(user_dir, safe + '.codsettings')
+		n = 1
+		while os.path.exists(path):
+			path = os.path.join(user_dir, safe + '_' + str(n) + '.codsettings')
+			n += 1
+		try:
+			with open(path, 'w', encoding='utf-8') as f:
+				json.dump(payload, f, indent=2)
+			self.log('Saved preset "' + meta['title'] + '" to library (' + path + ')')
+			return path
+		except Exception as e:
+			self.show_error_message('Save Preset', str(e))
+			return None
+
+	def _load_library(self):
+		'Scan recommended + user preset folders; return a list of preset dicts.'
+		recommended, user = self._preset_dirs()
+		items = []
+		for src, d in (('Recommended', recommended), ('My Presets', user)):
+			if not os.path.isdir(d):
+				continue
+			for fn in sorted(os.listdir(d)):
+				if not fn.lower().endswith(('.codsettings', '.json')):
+					continue
+				p = os.path.join(d, fn)
+				try:
+					with open(p, 'r', encoding='utf-8') as f:
+						payload = json.load(f)
+					meta = payload.get('meta', {})
+					items.append({'title': meta.get('title') or os.path.splitext(fn)[0], 'game': meta.get('game', 'unknown'), 'author': meta.get('author', ''), 'description': meta.get('description', ''), 'count': meta.get('count', len(payload.get('settings', []))), 'source': src, 'path': p, 'payload': payload})
+				except Exception:
+					continue
+		return items
+
+	def show_settings_library(self):
+		'Browse recommended and personal presets; preview & apply, import, save, or delete.'
+		dlg = QDialog(self)
+		dlg.setWindowTitle('Settings Library')
+		dlg.resize(720, 540)
+		lay = QVBoxLayout(dlg)
+		intro = QLabel('<p>Apply <b>recommended</b> presets or ones <b>shared with you</b>, save your own, and manage your collection. Applying only stages the changes -- review them in the preview, then <b>File &gt; Save Options</b> to write them to the game.</p>')
+		intro.setWordWrap(True)
+		lay.addWidget(intro)
+		only_game = QCheckBox('Show only presets for the loaded game')
+		only_game.setChecked(bool(self.game))
+		lay.addWidget(only_game)
+		listw = QListWidget()
+		lay.addWidget(listw, 1)
+		details = QLabel('Select a preset to see its details.')
+		details.setWordWrap(True)
+		details.setStyleSheet('color: gray;')
+		lay.addWidget(details)
+
+		def selected():
+			it = listw.currentItem()
+			return it.data(Qt.UserRole) if it else None
+
+		def refresh():
+			listw.clear()
+			for it in self._load_library():
+				if only_game.isChecked() and self.game and it['game'] != self.game:
+					continue
+				label = it['title'] + '  |  ' + str(it['game']) + '  |  ' + str(it['count']) + ' settings  |  ' + it['source']
+				item = QListWidgetItem(label)
+				item.setData(Qt.UserRole, it)
+				listw.addItem(item)
+			if listw.count() == 0:
+				details.setStyleSheet('color: gray;')
+				details.setText('No presets to show. Use "Save current as preset" or "Import file to library" to add some.')
+
+		def on_select():
+			d = selected()
+			if not d:
+				return
+			parts = ['<b>' + d['title'] + '</b> -- for <b>' + str(d['game']) + '</b>']
+			if d['author']:
+				parts.append(' by ' + d['author'])
+			if d['description']:
+				parts.append('<br>' + d['description'])
+			parts.append('<br><i>' + d['source'] + ' - ' + str(d['count']) + ' settings - ' + os.path.basename(d['path']) + '</i>')
+			details.setStyleSheet('')
+			details.setText(''.join(parts))
+
+		def do_apply():
+			d = selected()
+			if not d:
+				return
+			if not self.options:
+				self.show_error_message('Apply', 'Load a game first (File > Change Game).')
+				return
+			meta = d['payload'].get('meta', {})
+			self._apply_records(d['payload'].get('settings', []), meta.get('game', d['game']), d['title'])
+
+		def do_import():
+			path, _ = QFileDialog.getOpenFileName(dlg, 'Add a preset file to your library', '', 'COD Settings (*.codsettings *.json);;All Files (*)')
+			if not path:
+				return
+			payload = self._read_preset(path)
+			if payload is None:
+				return
+			_, user_dir = self._preset_dirs()
+			dst = os.path.join(user_dir, os.path.basename(path))
+			base, ext = os.path.splitext(dst)
+			n = 1
+			while os.path.exists(dst):
+				dst = base + '_' + str(n) + ext
+				n += 1
+			try:
+				import shutil
+				shutil.copy2(path, dst)
+				self.log('Added preset to library: ' + dst)
+				refresh()
+			except Exception as e:
+				self.show_error_message('Import', str(e))
+
+		def do_save():
+			if self.save_current_as_preset():
+				refresh()
+
+		def do_delete():
+			d = selected()
+			if not d:
+				return
+			if d['source'] != 'My Presets':
+				self.show_error_message('Delete', 'Only presets in "My Presets" can be deleted.')
+				return
+			if QMessageBox.question(dlg, 'Delete preset', 'Delete "' + d['title'] + '" from your library?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+				return
+			try:
+				os.remove(d['path'])
+				self.log('Deleted preset ' + d['path'])
+				refresh()
+			except Exception as e:
+				self.show_error_message('Delete', str(e))
+
+		def do_folder():
+			_, user_dir = self._preset_dirs()
+			try:
+				os.startfile(user_dir)
+			except Exception:
+				self.log('Preset folder: ' + user_dir)
+
+		listw.currentItemChanged.connect(lambda *_: on_select())
+		listw.itemDoubleClicked.connect(lambda *_: do_apply())
+		only_game.stateChanged.connect(lambda *_: refresh())
+
+		btns = QHBoxLayout()
+		b_apply = QPushButton('Preview && Apply')
+		b_import = QPushButton('Import file to library...')
+		b_save = QPushButton('Save current as preset...')
+		b_delete = QPushButton('Delete')
+		b_folder = QPushButton('Open folder')
+		b_close = QPushButton('Close')
+		b_apply.clicked.connect(do_apply)
+		b_import.clicked.connect(do_import)
+		b_save.clicked.connect(do_save)
+		b_delete.clicked.connect(do_delete)
+		b_folder.clicked.connect(do_folder)
+		b_close.clicked.connect(dlg.accept)
+		for b in (b_apply, b_import, b_save, b_delete, b_folder):
+			btns.addWidget(b)
+		btns.addStretch()
+		btns.addWidget(b_close)
+		lay.addLayout(btns)
+		refresh()
+		dlg.exec_()
 
 	def set_widget_value(self, widget_data, value):
 		value = str(value)

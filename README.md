@@ -125,12 +125,26 @@ Hover over any setting to see:
 - Can be detached and positioned separately
 - Save log contents for troubleshooting
 
-### Import/Export Settings
-- **Export**: `File > Export Settings...` writes your current (edited) values to a portable
-  `.codsettings` file (JSON), tagged with the source game and profile.
+### Import/Export & sharing Settings
+- **Export**: `File > Export Settings...` prompts for a **title / author / description**, then
+  writes your current (edited) values to a portable `.codsettings` file (JSON) tagged with the
+  source game. This is a **shareable** file — send it to a friend, post it, etc., and they can
+  load it or add it to their library.
 - **Import**: `File > Import Settings...` opens an interactive **preview** of a `.codsettings`
   file against the currently loaded game. Settings are matched **by name**, so it works across
   profiles *and* across games (e.g. player 1 exports from MW2, player 2 imports into MW3).
+
+### Settings Library (`File > Settings Library...`)
+A browsable collection of presets, so users can pick **recommended** settings, use **someone
+else's** shared preset, or keep **their own** — and decide for themselves which to apply.
+- Two shelves: **Recommended** (bundled with the app, in `presets/`) and **My Presets** (yours,
+  under `%LOCALAPPDATA%\CODOptionsEditor\presets`). Filter to just the loaded game if you like.
+- Select a preset to see its author/description, then **Preview && Apply** (runs the same by-name,
+  cross-game preview as Import). **Save current as preset...** adds your live settings to the
+  library; **Import file to library...** drops a shared `.codsettings` in; **Delete** removes your
+  own; **Open folder** reveals the presets folder.
+- The `.codsettings` format carries `title / author / description / game` so shared presets are
+  self-describing; older files without those fields still load (title falls back to the filename).
 - The preview is a tick-list showing **current → new** with a colour-coded status:
   - **Changed** (green, checked by default) — valid and different; applied on confirm.
   - **Unchanged** (grey, locked) — matched but already equal.
