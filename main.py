@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
 							 QScrollArea, QCheckBox, QComboBox, QLineEdit,
 							 QGridLayout, QDialog, QTextEdit, QAction, QDockWidget,
-							 QHBoxLayout, QMenu, QActionGroup, QDoubleSpinBox, QListWidget, QListWidgetItem)
+							 QHBoxLayout, QMenu, QActionGroup, QListWidget, QListWidgetItem)
 from help_texts import get_help_texts
 from setting_row import SettingRow, SettingSpec, CHANGED_COLOR
 
@@ -529,10 +529,10 @@ class OptionsEditor(QMainWindow):
 
 		dlg = QDialog(self)
 		dlg.setWindowTitle('Controller / Advanced Settings (binary) -- ' + self.game)
-		dlg.resize(620, 560)
+		dlg.resize(660, 560)
 		lay = QVBoxLayout(dlg)
 		if engine == 'iw':
-			intro = '<p>These live in the binary <b>.csb</b> for <b>' + self.game + '</b>: deadzones, stick sensitivity, aim response, and movement/interaction behaviors.</p>'
+			intro = '<p>These live in the binary <b>.csb</b> for <b>' + self.game + '</b>: deadzones, stick sensitivity, aim response, and movement/interaction behaviors. Edited rows turn <b>amber</b> -- use a row&#39;s revert to undo one.</p>'
 		else:
 			intro = '<p>Decoded <b>' + self.game + '</b> profile blob (<b>.b0</b>). These are the stored control/movement values; the in-game names for these ids are not yet recovered, so they are read-only.</p>'
 		header = QLabel(intro)
@@ -544,28 +544,21 @@ class OptionsEditor(QMainWindow):
 		scroll = QScrollArea()
 		scroll.setWidgetResizable(True)
 		content = QWidget()
-		grid = QGridLayout(content)
-		grid.addWidget(QLabel('<b>Setting</b>'), 0, 0)
-		grid.addWidget(QLabel('<b>Value</b>'), 0, 1)
+		vbox = QVBoxLayout(content)
+		vbox.setContentsMargins(0, 0, 0, 0)
+		vbox.setSpacing(0)
 		editors = {}
-		for i, r in enumerate(rows, 1):
-			grid.addWidget(QLabel(r['name']), i, 0)
+		for r in rows:
 			if editable and r.get('kind') == 'float':
 				lo, hi, dec, step = csb_binary.float_range(r['name'])
-				sb = QDoubleSpinBox()
-				sb.setDecimals(dec)
-				sb.setRange(lo, hi)
-				sb.setSingleStep(step)
-				sb.setValue(float(r['value']))
-				sb.setToolTip('Valid range %g - %g' % (lo, hi))
-				grid.addWidget(sb, i, 1)
-				editors[r['hash']] = [sb, float(r['value'])]
+				spec = SettingSpec(name=r['name'], value=str(r['value']), comment=str(lo) + ' to ' + str(hi), editable=True, help_text=r['name'])
+				row = SettingRow(spec, non_editable_fields=[])
+				editors[r['hash']] = row
 			else:
-				lbl = QLabel(str(r['value']))
-				lbl.setStyleSheet('color: gray;')
-				lbl.setToolTip('Read-only')
-				grid.addWidget(lbl, i, 1)
-		content.setLayout(grid)
+				spec = SettingSpec(name=r['name'], value=str(r['value']), comment='', editable=False, help_text=r['name'])
+				row = SettingRow(spec, non_editable_fields=[])
+			vbox.addWidget(row)
+		vbox.addStretch(1)
 		scroll.setWidget(content)
 		lay.addWidget(scroll)
 
@@ -595,9 +588,12 @@ class OptionsEditor(QMainWindow):
 
 		def do_save():
 			changes = {}
-			for h, pair in editors.items():
-				if abs(pair[0].value() - pair[1]) > 1e-9:
-					changes[h] = pair[0].value()
+			for h, row in editors.items():
+				if row.is_changed():
+					try:
+						changes[h] = float(row.value())
+					except ValueError:
+						continue
 			if not changes:
 				QMessageBox.information(dlg, 'No changes', 'No float settings were changed.')
 				return
@@ -615,7 +611,7 @@ class OptionsEditor(QMainWindow):
 			for h, old, new in applied:
 				self.log('  ' + name_of(h) + ': ' + str(old) + ' -> ' + str(new))
 				if h in editors:
-					editors[h][1] = new
+					editors[h].reset_baseline()
 			for r in rows:
 				if r.get('hash') in changes:
 					r['value'] = changes[r['hash']]
@@ -638,10 +634,11 @@ class OptionsEditor(QMainWindow):
 			self.log('Binary settings [' + self.game + ']: restored from %s' % os.path.basename(bpath))
 			try:
 				new_info = csb_binary.decode_binary(path, engine)
-				for r in new_info['rows']:
-					if r.get('hash') in editors:
-						editors[r['hash']][0].setValue(float(r['value']))
-						editors[r['hash']][1] = float(r['value'])
+				vals = {rr.get('hash'): rr['value'] for rr in new_info['rows']}
+				for h, row in editors.items():
+					if h in vals:
+						row.set_value(str(vals[h]))
+						row.reset_baseline()
 			except Exception:
 				pass
 			refresh_crc()

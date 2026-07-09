@@ -176,12 +176,12 @@ The **Advanced** menu exposes settings that are not stored in the plaintext conf
 - **Controller Settings (Binary)** — decodes the binary `.csb` (MWII) / BO7 profile blob:
   stick deadzones, stick sensitivity, aim response, and movement/interaction behaviors, with
   friendly names for the identified settings.
-  - **Float settings are editable.** Each identified numeric setting (deadzones, sensitivities,
-    aim response) shows a bounded spin box. **Save Changes to Game File** writes them back
-    **CRC-safe** (the `.csb` is a self-sealing checksum'd container, so the game accepts the
-    edit) after a confirmation prompt. A **timestamped `.bak`** is created automatically before
-    every write, and **Restore from Backup…** rolls back to any prior backup (validated before
-    it overwrites). Close the game before saving — this edits the live cloud-synced save.
+  - **Float settings are editable** and use the **same unified row** as the main editor — a
+    slider + number box that turns **amber with a ↺ revert** when you change it. **Save Changes to
+    Game File** writes them back **CRC-safe** (the `.csb` is a self-sealing checksum'd container,
+    so the game accepts the edit) after a confirmation prompt. A **timestamped `.bak`** is created
+    automatically before every write, and **Restore from Backup…** rolls back to any prior backup
+    (validated before it overwrites). Close the game before saving — this edits the live cloud-synced save.
   - **Enum settings** (e.g. sprint / interact behavior) remain **read-only** — there is no
     verified writer for the variable-length enum pool yet.
 - **View Config dvars (.cfg)** — decodes hashed `config*.cfg` gameplay/console dvars. For MWII
