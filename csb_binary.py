@@ -21,6 +21,7 @@ FLOAT_NAMES = {
     # 2026-07-09 on BO7's g.p.cod25.1.0.b0; the ids are shared with the MWII .csb. This corrected
     # several earlier position-guessed labels: the L/R and min/max were swapped, and 0x211c4e99 was
     # mislabeled "Look Vertical Sensitivity" -- it is actually the Right Trigger deadzone.
+    # (all 8 confirmed exact by the user, incl. Left Stick Max = 0.80 for an in-game value of 80.)
     0x3fbbba5c: "Stick Sensitivity - Horizontal (gamepad)",
     0xfd578836: "Stick Sensitivity - Vertical (gamepad)",
     0x93d9f49c: "Left Stick Min Input (deadzone)",
