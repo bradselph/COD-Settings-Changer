@@ -29,12 +29,24 @@ FIXTURE_GS = (
 FIXTURE_GA = "0\nMicrophoneVolume:0.0 = \"4\"\n"
 
 
+_EDITOR = None
+
+
+def _editor():
+    # One OptionsEditor reused across tests: instantiating several offscreen windows in one
+    # process is flaky (Qt can segfault on teardown), so we build it once and reload per test.
+    global _EDITOR
+    if _EDITOR is None:
+        _EDITOR = main.OptionsEditor()
+    return _EDITOR
+
+
 def _load_editor(tmp):
     gs = os.path.join(tmp, "options.4.cod23.cst")
     ga = os.path.join(tmp, "gamerprofile.0.BASE.cst")
     open(gs, "w").write(FIXTURE_GS)
     open(ga, "w").write(FIXTURE_GA)
-    ed = main.OptionsEditor()
+    ed = _editor()
     ed.game = "MW3 2023"          # .cst, is_txt_game() == False
     ed.file_path = gs
     ed.game_agnostic_file_path = ga
@@ -102,4 +114,5 @@ if __name__ == "__main__":
                 failed += 1
                 print(f"FAIL {name}: {type(e).__name__}: {e}")
     print(f"\n{passed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
+    sys.stdout.flush()
+    os._exit(1 if failed else 0)   # skip Qt's offscreen teardown (segfaults on interpreter exit)

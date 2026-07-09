@@ -126,4 +126,5 @@ if __name__ == "__main__":
                 failed += 1
                 print(f"FAIL {name}: {type(e).__name__}: {e}")
     print(f"\n{passed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
+    sys.stdout.flush()
+    os._exit(1 if failed else 0)   # skip Qt's offscreen teardown (segfaults on interpreter exit)
