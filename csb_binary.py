@@ -31,6 +31,30 @@ ENUM_NAMES = {
     0x8e0d45ec: "Interact / Reload behavior",
 }
 
+# Best-effort setting labels for decoded control VALUES, from the 3-account diff / MWII menu RE
+# in lddc-analysis/DECODED-BINARY-SETTINGS.md. The exact dvar<->value pairing is NOT stored inline
+# in the blob, so only distinctive values (each unique to one setting) are labeled here; everything
+# else is shown by its raw value. Read-only / informational -- naming the rest needs live-game
+# correlation (change a setting in-game, re-decode, and see which value moved).
+VALUE_LABELS = {
+    "single_tap_sprint": "Sprint / Tac-Sprint Behavior",
+    "double_tap_sprint": "Sprint / Tac-Sprint Behavior",
+    "acceleration_speed": "Automatic Sprint",
+    "mount_binding": "Weapon Mount Activation",
+    "ads_melee": "Melee (ADS) Behavior",
+    "mantle_only": "Auto-Mantle",
+    "on_release": "Interact / Reload Behavior",
+    "use_tap": "Interact / Reload Behavior",
+    "contextual_tap": "Interact / Reload Behavior",
+    "tap_single": "Armor Plate / Equipment Behavior",
+    "tap_all": "Armor Plate / Equipment Behavior",
+    "simultaneous": "Equipment Behavior",
+    "buttons_default": "Controller Button Layout",
+    "thumbstick_default": "Stick Layout",
+    "hit_marker_3d": "Hit Marker Style",
+    "keyboard_mouse": "Input Device",
+}
+
 def crc_valid(data: bytes) -> bool:
     return (zlib.crc32(data) & 0xFFFFFFFF) == CRC_RESIDUE
 
@@ -47,6 +71,18 @@ def _enum_val(data, h):
         return i + 5, data[i + 5:i + 5 + ln].split(b"\0")[0].decode("latin1")
     return None, None
 
+def _scan_enum_pool(data):
+    """Length-prefixed lowercase enum values ([len][chars]) in a .csb/.b0 string pool.
+    Returns [(offset, value), ...]. Only lowercase tokens match, so the CamelCase dvar
+    names in the name table are excluded."""
+    vals = []
+    for m in re.finditer(rb"[a-z][a-z0-9_]{2,}", data):
+        o = m.start()
+        s = m.group().decode("latin1")
+        if o >= 1 and data[o - 1] in (len(s), len(s) + 1):
+            vals.append((o, s))
+    return vals
+
 def decode(path):
     """Return (rows, crc_ok). rows: {name, hash, value, kind, offset}."""
     data = open(path, "rb").read()
@@ -59,6 +95,13 @@ def decode(path):
         off, v = _enum_val(data, h)
         if off is not None:
             rows.append({"name": name, "hash": h, "value": v, "kind": "enum", "offset": off})
+    # Surface additional decoded control choices whose value maps to a known setting
+    # (read-only; the hash<->name pairing for these isn't recoverable offline).
+    seen = {str(r["value"]) for r in rows}
+    for off, s in _scan_enum_pool(data):
+        if s in VALUE_LABELS and s not in seen:
+            rows.append({"name": VALUE_LABELS[s], "value": s, "kind": "value", "offset": off})
+            seen.add(s)
     return rows, crc_valid(data)
 
 def float_range(name):
@@ -194,7 +237,7 @@ def decode_binary(path, engine):
         rows, crc_ok = decode(path)
         return {"rows": rows, "crc_ok": crc_ok, "editable": True, "engine": "iw"}
     vals = decode_bo7_enums(path)
-    rows = [{"name": "Profile value %d" % i, "value": s, "kind": "value", "offset": o}
+    rows = [{"name": VALUE_LABELS.get(s, "Profile value %d" % i), "value": s, "kind": "value", "offset": o}
             for i, (o, s) in enumerate(vals, 1)]
     return {"rows": rows, "crc_ok": None, "editable": False, "engine": "tr"}
 
@@ -210,12 +253,7 @@ def find_csb():
 def decode_bo7_enums(path):
     """Extract the length-prefixed enum control/movement/interaction values from BO7's
     profile binary. Values are self-descriptive; hash->name mapping is not yet available."""
-    data = open(path, "rb").read()
-    vals = []
-    for m in re.finditer(rb"[a-z][a-z0-9_]{2,}", data):
-        o = m.start(); s = m.group().decode("latin1")
-        if o >= 1 and data[o - 1] in (len(s), len(s) + 1):
-            vals.append((o, s))
+    vals = _scan_enum_pool(open(path, "rb").read())
     return vals
 
 
