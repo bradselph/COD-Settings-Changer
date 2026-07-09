@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import re
@@ -242,6 +243,7 @@ class PresetMetaDialog(QDialog):
 		form = QGridLayout()
 		form.addWidget(QLabel('Title:'), 0, 0)
 		self.title_edit = QLineEdit(default_title)
+		self.title_edit.setMaxLength(80)
 		form.addWidget(self.title_edit, 0, 1)
 		form.addWidget(QLabel('Author:'), 1, 0)
 		self.author_edit = QLineEdit(default_author)
@@ -1505,7 +1507,7 @@ class OptionsEditor(QMainWindow):
 		store.setValue('preset_author', meta['author'])
 		records = self._collect_records()
 		payload = self._build_payload(records, meta)
-		safe = re.sub(r'[^A-Za-z0-9_-]+', '_', meta['title'] or self.game).strip('_') or 'settings'
+		safe = (re.sub(r'[^A-Za-z0-9_-]+', '_', meta['title'] or self.game).strip('_') or 'settings')[:80]
 		path, _ = QFileDialog.getSaveFileName(self, 'Export / Share Settings', f'{safe}.codsettings', 'COD Settings (*.codsettings *.json);;All Files (*)')
 		if not path:
 			return
@@ -1528,7 +1530,7 @@ class OptionsEditor(QMainWindow):
 		payload = self._read_preset(path)
 		if payload is None:
 			return
-		meta = payload.get('meta', {})
+		meta = payload.get('meta') or {}
 		self._apply_records(payload.get('settings', []), meta.get('game', 'unknown'), meta.get('title') or os.path.basename(path))
 
 	def _read_preset(self, path):
@@ -1536,7 +1538,7 @@ class OptionsEditor(QMainWindow):
 		try:
 			with open(path, 'r', encoding='utf-8') as f:
 				payload = json.load(f)
-			if not isinstance(payload, dict) or 'settings' not in payload:
+			if not isinstance(payload, dict) or not isinstance(payload.get('settings'), list):
 				raise ValueError('not a valid .codsettings file')
 			return payload
 		except Exception as e:
@@ -1568,6 +1570,8 @@ class OptionsEditor(QMainWindow):
 				index.setdefault(setting['name'], []).append((section, setting))
 		rows, missing = [], []
 		for rec in records:
+			if not isinstance(rec, dict):
+				continue
 			name = rec.get('name', '')
 			value = str(rec.get('value', ''))
 			if name not in index:
@@ -1636,7 +1640,7 @@ class OptionsEditor(QMainWindow):
 		store.setValue('preset_author', meta['author'])
 		_, user_dir = self._preset_dirs()
 		payload = self._build_payload(self._collect_records(), meta)
-		safe = re.sub(r'[^A-Za-z0-9_-]+', '_', (meta['title'] or self.game)).strip('_') or 'preset'
+		safe = (re.sub(r'[^A-Za-z0-9_-]+', '_', (meta['title'] or self.game)).strip('_') or 'preset')[:80]
 		path = os.path.join(user_dir, safe + '.codsettings')
 		n = 1
 		while os.path.exists(path):
@@ -1665,7 +1669,7 @@ class OptionsEditor(QMainWindow):
 				try:
 					with open(p, 'r', encoding='utf-8') as f:
 						payload = json.load(f)
-					meta = payload.get('meta', {})
+					meta = payload.get('meta') or {}
 					items.append({'title': meta.get('title') or os.path.splitext(fn)[0], 'game': meta.get('game', 'unknown'), 'author': meta.get('author', ''), 'description': meta.get('description', ''), 'count': meta.get('count', len(payload.get('settings', []))), 'source': src, 'path': p, 'payload': payload})
 				except Exception:
 					continue
@@ -1709,14 +1713,17 @@ class OptionsEditor(QMainWindow):
 
 		def on_select():
 			d = selected()
+			b_delete.setEnabled(bool(d and d['source'] == 'My Presets'))
 			if not d:
+				details.setStyleSheet('color: gray;')
+				details.setText('Select a preset to see its details.')
 				return
-			parts = ['<b>' + d['title'] + '</b> -- for <b>' + str(d['game']) + '</b>']
+			parts = ['<b>' + html.escape(d['title']) + '</b> -- for <b>' + html.escape(str(d['game'])) + '</b>']
 			if d['author']:
-				parts.append(' by ' + d['author'])
+				parts.append(' by ' + html.escape(d['author']))
 			if d['description']:
-				parts.append('<br>' + d['description'])
-			parts.append('<br><i>' + d['source'] + ' - ' + str(d['count']) + ' settings - ' + os.path.basename(d['path']) + '</i>')
+				parts.append('<br>' + html.escape(d['description']))
+			parts.append('<br><i>' + d['source'] + ' - ' + str(d['count']) + ' settings - ' + html.escape(os.path.basename(d['path'])) + '</i>')
 			details.setStyleSheet('')
 			details.setText(''.join(parts))
 
@@ -1727,7 +1734,7 @@ class OptionsEditor(QMainWindow):
 			if not self.options:
 				self.show_error_message('Apply', 'Load a game first (File > Change Game).')
 				return
-			meta = d['payload'].get('meta', {})
+			meta = d['payload'].get('meta') or {}
 			self._apply_records(d['payload'].get('settings', []), meta.get('game', d['game']), d['title'])
 
 		def do_import():
@@ -1777,7 +1784,7 @@ class OptionsEditor(QMainWindow):
 			try:
 				os.startfile(user_dir)
 			except Exception:
-				self.log('Preset folder: ' + user_dir)
+				QMessageBox.information(dlg, 'Preset folder', user_dir)
 
 		listw.currentItemChanged.connect(lambda *_: on_select())
 		listw.itemDoubleClicked.connect(lambda *_: do_apply())
@@ -1788,6 +1795,7 @@ class OptionsEditor(QMainWindow):
 		b_import = QPushButton('Import file to library...')
 		b_save = QPushButton('Save current as preset...')
 		b_delete = QPushButton('Delete')
+		b_delete.setEnabled(False)
 		b_folder = QPushButton('Open folder')
 		b_close = QPushButton('Close')
 		b_apply.clicked.connect(do_apply)
