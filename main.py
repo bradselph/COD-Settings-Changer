@@ -5,7 +5,7 @@ import re
 import stat
 import sys
 from qt_material import apply_stylesheet
-from PyQt5.QtCore import QSettings, Qt, QTimer
+from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 							 QPushButton, QLabel, QFileDialog, QMessageBox, QTabWidget,
@@ -34,9 +34,6 @@ class GameSelector(QDialog):
 		except Exception as e:
 			print(f"Error applying theme to GameSelector: {str(e)}")
 
-		if not settings.value("app_launched", False, type=bool):
-			self.show_first_time_warning()
-			settings.setValue("app_launched", True)
 
 		layout = QVBoxLayout()
 		label = QLabel("Choose the game you want to modify settings for:")
@@ -80,31 +77,6 @@ class GameSelector(QDialog):
 		warning_dialog.setIcon(QMessageBox.Warning)
 		warning_dialog.setStandardButtons(QMessageBox.Ok)
 		warning_dialog.exec_()
-
-	def show_read_only_message(self):
-		message = """
-		<div style='text-align: center;'>
-			<h3>Read-only Settings Notice</h3>
-			<p>The settings files have been saved as read-only.<br>
-			This prevents the game from overwriting your settings.</p>
-			<p>If you encounter any problems or want to allow the game<br>
-			to modify these files again, you can undo this by:</p>
-			<ol>
-				<li>Locating the changed files</li>
-				<li>Right-clicking on each file</li>
-				<li>Selecting 'Properties'</li>
-				<li>Unchecking the 'Read-only' attribute</li>
-				<li>Clicking 'Apply' and then 'OK'</li>
-			</ol>
-			<p>This will allow the game to modify and overwrite these files again.</p>
-		</div>
-		"""
-		msg_box = QMessageBox(self)
-		msg_box.setWindowTitle("Read-only Settings")
-		msg_box.setText(message)
-		msg_box.setTextFormat(Qt.RichText)
-		msg_box.setIcon(QMessageBox.Information)
-		msg_box.exec_()
 
 	def setup_window_flags(self):
 		self.setWindowFlags(self.windowFlags() | Qt.Window | Qt.WindowStaysOnTopHint)
@@ -391,22 +363,6 @@ class OptionsEditor(QMainWindow):
 	def setup_message_box(self, msg_box):
 		msg_box.setWindowFlags(msg_box.windowFlags() | Qt.WindowStaysOnTopHint)
 		return msg_box
-
-	def select_game(self):
-		try:
-			dialog = GameSelector(self)
-			if dialog.exec_():
-				self.game = dialog.selected_game
-				self.selected_game = self.game
-				self.log(f"Selected game: {self.game}")
-				self.load_file(auto=True)
-				self.raise_()
-				self.activateWindow()
-			else:
-				self.log('Game selection cancelled - staying on current view')
-		except Exception as e:
-			self.log(f"Error in select_game: {str(e)}")
-			QMessageBox.critical(self, "Game Selection Error", f"An error occurred during game selection: {str(e)}")
 
 	def show_welcome(self):
 		'Idle landing state so the app opens without forcing game/file selection.'
@@ -777,17 +733,6 @@ class OptionsEditor(QMainWindow):
 								  "The next launch will be like a fresh install.")
 			self.close()
 
-	def closeEvent(self, event):
-		if self.check_unsaved_changes():
-			settings = QSettings("Lif3Snatcher's", "CODOptionsEditor")
-			settings.sync()
-			if not settings.contains("app_launched"):
-				event.accept()
-			else:
-				event.accept()
-		else:
-			event.ignore()
-
 	def create_widgets(self):
 		central_widget = QWidget()
 		self.setCentralWidget(central_widget)
@@ -933,9 +878,6 @@ class OptionsEditor(QMainWindow):
 				self.log_window_detached = False
 		else:
 			self.log_window.close()
-
-	def hide_log_window(self):
-		self.log_window.close()
 
 	def load_file(self, auto=False):
 		if not self.game:
@@ -1108,22 +1050,6 @@ class OptionsEditor(QMainWindow):
 						self.log(f"Found {filename} at {path}")
 						return path
 		return None
-
-	def show_bo6_warning(self):
-		if self.is_txt_game():
-			message = """
-			<div style='text-align: center;'>
-				<h3 style='color: #FFA500;'>Important Note</h3>
-				<p>BO6 2024 uses a different file format (.txt) than previous games.</p>
-				<p><b>Make sure you're selecting the correct files.</b></p>
-			</div>
-			"""
-			msg_box = QMessageBox(self)
-			msg_box.setWindowTitle("BO6 File Format")
-			msg_box.setText(message)
-			msg_box.setTextFormat(Qt.RichText)
-			msg_box.setIcon(QMessageBox.Information)
-			msg_box.exec_()
 
 	def show_read_only_message(self):
 		msg_box = QMessageBox(QMessageBox.Information, "Read-only File",
@@ -1648,16 +1574,6 @@ class OptionsEditor(QMainWindow):
 		except ValueError:
 			return a.lower() == b.lower()
 
-	def update_file_permissions(self):
-		if self.read_only_action.isChecked():
-			os.chmod(self.file_path, stat.S_IREAD)
-			os.chmod(self.game_agnostic_file_path, stat.S_IREAD)
-			self.read_only = True
-		else:
-			os.chmod(self.file_path, stat.S_IWRITE | stat.S_IREAD)
-			os.chmod(self.game_agnostic_file_path, stat.S_IWRITE | stat.S_IREAD)
-			self.read_only = False
-
 	def save_file_with_permissions(self, file_path, file_type):
 		original_permissions = os.stat(file_path).st_mode
 		try:
@@ -1790,6 +1706,7 @@ class OptionsEditor(QMainWindow):
 
 	def closeEvent(self, event):
 		if self.check_unsaved_changes():
+			QSettings("Lif3Snatcher's", "CODOptionsEditor").sync()
 			event.accept()
 		else:
 			event.ignore()

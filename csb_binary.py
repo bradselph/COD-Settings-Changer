@@ -6,7 +6,7 @@ deadzone/aim-assist/movement/interaction settings that are NOT in the plaintext 
 File format (reverse-engineered, 28/28 findings verified):
 - 16-byte static header, then value records [float32 LE][0x00][uint32 hash],
   a length-prefixed enum pool [uint32 hash][len][ascii][NUL], and a trailing
-  CRC32(file[:-4]) little-endian.  => writes are CRC-safe (see write_float).
+  CRC32(file[:-4]) little-endian.  => writes are CRC-safe (see write_floats).
 
 The dvar hash is a custom, non-invertible IW-engine FNV variant, so only settings we
 have positively identified carry friendly names; the rest are labelled by their raw id.
@@ -93,11 +93,6 @@ def write_floats(path, changes):
     if not crc_valid(open(path, "rb").read()):
         raise ValueError("post-write CRC verification failed")
     return applied
-
-def write_float(path, h, new_val):
-    """CRC-safe write of a single float setting by hash. Returns (old, new)."""
-    _, old, new = write_floats(path, {h: new_val})[0]
-    return old, new
 
 def backup(path):
     """Copy `path` to a timestamped .bak beside it (metadata preserved). Returns the
@@ -212,24 +207,6 @@ def find_csb():
 # BO7 / cod25 (Treyarch) profile binary: same length-prefixed enum pool as the
 # MWII .csb, but a different container (no trailing CRC self-seal). Read-only.
 # ---------------------------------------------------------------------------
-def find_bo7_profile():
-    """Locate BO7's g.p.cod25.1.0.b0 profile binary in Connected Storage, or None."""
-    lad = os.environ.get("LOCALAPPDATA", "")
-    pkgs = os.path.join(lad, "Packages")
-    if not os.path.isdir(pkgs):
-        return None
-    for d in os.listdir(pkgs):
-        if not d.startswith("38985CA0.COREBase"):
-            continue
-        for store in ("wgs", "xgs"):
-            root = os.path.join(pkgs, d, "SystemAppData", store)
-            if not os.path.isdir(root):
-                continue
-            for base, _dirs, files in os.walk(root):
-                if base.endswith("g.p.cod25.1.0.b0") and "save" in files:
-                    return os.path.join(base, "save")
-    return None
-
 def decode_bo7_enums(path):
     """Extract the length-prefixed enum control/movement/interaction values from BO7's
     profile binary. Values are self-descriptive; hash->name mapping is not yet available."""
