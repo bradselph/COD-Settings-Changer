@@ -12,9 +12,13 @@
     - [Saving Options](#saving-options)
 6. [Editing Options](#editing-options)
 7. [Additional Features](#additional-features)
+    - [Unified Settings Rows & Change Tracking](#unified-settings-rows--change-tracking)
     - [Search Functionality](#search-functionality)
     - [Tooltips](#tooltips)
     - [Log Window](#log-window)
+    - [Import/Export & Sharing Settings](#importexport--sharing-settings)
+    - [Settings Library](#settings-library)
+    - [Advanced Viewers](#advanced-viewers)
     - [Read-only Mode](#read-only-mode)
     - [Changing Games](#changing-games)
     - [Clearing Settings](#clearing-settings)
@@ -41,9 +45,7 @@ The Call of Duty Options Editor is a tool designed to help you customize your Ca
 #### Building from Source
 1. Ensure Python 3.12 or higher is installed
 2. Download or clone the source code
-3. Run the appropriate build script:
-   - Windows: Double-click `build.bat`
-   - Unix/Linux: Run `./build.sh`
+3. Build the executable — double-click `build.bat` (or run `python build.py`)
 4. The executable will be created in the `dist` folder
 
 
@@ -65,9 +67,10 @@ The main interface consists of:
 - A log window (can be toggled on/off)
 
 ### Menu Bar
-- **File**: Contains options for loading, saving, reloading options, exporting/importing settings, changing games, and exiting.
+- **File**: Contains options for loading, saving, reloading options, exporting/importing settings, the Settings Library, changing games, and exiting.
 - **View**: Allows you to show/hide the log window.
 - **Options**: Includes options to save settings as read-only and clear all settings and even change the visual theme of the application.
+- **Advanced**: Opens the Controller Settings and Advanced Console Settings viewers.
 - **Help**: Provides access to the "About" information and the first-time warning.
 
 ### Themes
@@ -86,8 +89,8 @@ The application supports multiple visual themes:
    - For BO6 2024: s.1.0.cod24.txt and g.1.0.l.txt
    - For BO7 2025: s.1.0.cod25.txt and g.p.cod25.1.0.l.txt
 
-Note: the `.txt` titles (BO6/BO7) store two synchronized copies, `.txt0` and `.txt1`. The editor
-auto-detects the `.txt0` buffer and writes **both** on save so the game can't reload a stale copy.
+Note: BO6/BO7 keep two copies of the settings file. The editor loads the current one and updates
+**both** when you save, so the game always sees your change.
 
 ### Saving Options
 1. After making changes, go to File > Save Options
@@ -151,9 +154,10 @@ Hover over any setting to see:
   file against the currently loaded game. Settings are matched **by name**, so it works across
   profiles *and* across games (e.g. player 1 exports from MW2, player 2 imports into MW3).
 
-### Settings Library (`File > Settings Library...`)
-A browsable collection of presets, so users can pick **recommended** settings, use **someone
-else's** shared preset, or keep **their own** — and decide for themselves which to apply.
+### Settings Library
+Open via `File > Settings Library...`. A browsable collection of presets, so you can pick
+**recommended** settings, use **someone else's** shared preset, or keep **your own** — and decide
+for yourself which to apply.
 - Two shelves: **Recommended** (bundled with the app, in `presets/`) and **My Presets** (yours,
   under `%LOCALAPPDATA%\CODOptionsEditor\presets`). Filter to just the loaded game if you like.
 - Select a preset to see its author/description, then **Preview && Apply** (runs the same by-name,
@@ -168,29 +172,24 @@ else's** shared preset, or keep **their own** — and decide for themselves whic
   - **Invalid** (red, locked) — out of range / not a valid option for the target game.
   - **Not present** — settings the target game/profile doesn't have (counted, not listed).
   Use *Select all changeable* / *Deselect all*, then **Apply Selected** (or Cancel).
-- Applied changes are marked unsaved; use `File > Save Options` to write them (both `.txt0`/`.txt1`
-  buffers are written for BO6/BO7).
+- Applied changes are marked unsaved; use `File > Save Options` to write them.
 
-### Advanced viewers (binary & config)
-The **Advanced** menu exposes settings that are not stored in the plaintext config:
-- **Controller Settings (Binary)** — decodes the binary `.csb` (MWII) / BO7 profile blob:
-  stick deadzones, stick sensitivity, aim response, and movement/interaction behaviors, with
-  friendly names for the identified settings.
-  - **Float settings are editable** and use the **same unified row** as the main editor — a
-    slider + number box that turns **amber with a ↺ revert** when you change it. **Save Changes to
-    Game File** writes them back **CRC-safe** (the `.csb` is a self-sealing checksum'd container,
-    so the game accepts the edit) after a confirmation prompt. A **timestamped `.bak`** is created
-    automatically before every write, and **Restore from Backup…** rolls back to any prior backup
-    (validated before it overwrites). Close the game before saving — this edits the live cloud-synced save.
-  - **Enum settings** (e.g. sprint / interact behavior) remain **read-only** — there is no
-    verified writer for the variable-length enum pool yet.
-- **View Config dvars (.cfg)** — decodes hashed `config*.cfg` gameplay/console dvars. For MWII
-  the dvar names are recovered from a bundled dvar-hash dump (`dvar_hashes.txt`); MW 2019 uses a
-  different 32-bit id format so those show as ids with readable values. Read-only.
+### Advanced viewers
+The **Advanced** menu exposes settings that aren't shown in the main config tabs:
 
-Note: two separate hash namespaces exist — *settings-menu* dvars (the `.csb`/`.cdb` controller
-settings) use custom 32-bit ids that are not in public dumps, while *gameplay/console* dvars
-(`config*.cfg`) use the 64-bit FNV-1a hash that community dumps do cover.
+- **Controller Settings** — the controller settings the game keeps in its saved-settings file:
+  stick deadzones, stick sensitivity, ADS sensitivity multipliers, Tac-Stance sensitivity, and
+  button/stick layout. Hover any setting to see what it does.
+  - Sensitivity and deadzone values are **editable** and use the **same unified row** as the main
+    editor — a slider + number box that turns **amber with a ↺ revert** when you change it.
+    **Save Changes to Game File** writes them back safely: a **timestamped backup** is made
+    automatically first, and **Restore from Backup…** rolls back to any earlier backup. Close the
+    game before saving.
+  - Layout and behavior settings (button layout, stick layout, sprint, interact/reload) are shown
+    for reference — change those in the game's own Controller settings.
+
+- **Advanced Console Settings** — the advanced console settings stored in the game's config files,
+  shown read-only for reference. Change these in-game.
 
 ### Read-only Mode
 - Option to save files as read-only
