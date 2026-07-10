@@ -6,10 +6,10 @@ import platform
 from pathlib import Path
 
 def check_python_version():
-    if sys.version_info < (3, 12):
-        print("Error: Python 3.12 or higher is required.")
+    if sys.version_info < (3, 14):
+        print("Error: Python 3.14 or higher is required.")
         print(f"Current Python version is {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-        print("Please install Python 3.12 or higher and try again.")
+        print("Please install Python 3.14 or higher and try again.")
         sys.exit(1)
     print(f"Python version {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} detected. Proceeding with build.")
 
@@ -38,7 +38,7 @@ def install_requirements(python_executable):
         sys.exit(1)
 
 def verify_required_files():
-    required_files = ["main.py", "help_texts.py", "gear_icon.ico"]
+    required_files = ["main.py", "help_texts.py", "csb_binary.py", "cfg_decoder.py", "gear_icon.ico"]
     missing_files = [f for f in required_files if not os.path.exists(f)]
     if missing_files:
         print("Error: Missing required files:", missing_files)
@@ -61,6 +61,8 @@ def build_executable(python_executable, main_script="main.py"):
         "--icon", icon_path,
         main_script,
         "--add-data", f"help_texts.py{os.pathsep}.",
+        "--add-data", f"csb_binary.py{os.pathsep}.",
+        "--add-data", f"cfg_decoder.py{os.pathsep}.",
         "--add-data", f"{icon_path}{os.pathsep}."
     ]
 
