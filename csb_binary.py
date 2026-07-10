@@ -33,9 +33,8 @@ FLOAT_NAMES = {
     0xc822f9e4: "ADS Sensitivity Multiplier",
     0xb83b71ab: "ADS Sensitivity Multiplier (Focus)",
     0xb8af9e7f: "Tac-Stance Sensitivity",
-    # Not yet live-verified (earlier best-guess -- may be imprecise; correlate to confirm):
-    0xa4108446: "Mouse Horizontal Sensitivity (unverified)",
-    0x06e0ad2f: "Aim Response / Aim-Assist (unverified)",
+    # Candidate ids NOT yet confirmed by correlation -- deliberately not shown to end users
+    # (would display a possibly-wrong name): 0xa4108446 (mouse H sens?), 0x06e0ad2f (aim response?).
 }
 ENUM_NAMES = {
     0x30b3622f: "Automatic Sprint behavior",
